@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -35,7 +34,7 @@ func retryBody(body io.ReadSeeker) io.ReadCloser {
 	if c, ok := body.(io.Closer); ok {
 		closer = c
 	} else {
-		closer = ioutil.NopCloser(body)
+		closer = io.NopCloser(body)
 	}
 
 	type ReadSeekCloser struct {
