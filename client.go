@@ -186,22 +186,11 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 		return State{}, parseErrorResponse(resp)
 	}
 
-	type Response struct {
-		Version string        `json:"version"`
-		OS      string        `json:"os"`
-		Arch    string        `json:"arch"`
-		UpTime  time.Duration `json:"uptime"`
-
-		CPUs       int    `json:"num_cpu"`
-		UsableCPUs int    `json:"num_cpu_used"`
-		HeapAlloc  uint64 `json:"mem_heap_used"`
-		StackAlloc uint64 `json:"mem_stack_used"`
-	}
-	var response Response
-	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+	var state State
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&state); err != nil {
 		return State{}, err
 	}
-	return State(response), nil
+	return state, nil
 }
 
 // APIs returns a list of all API endpoints supported
