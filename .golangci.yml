@@ -4,6 +4,9 @@ linters-settings:
 
   misspell:
     locale: US
+ 
+  staticcheck:
+    checks: ["all"]
 
 linters:
   disable-all: true
@@ -11,6 +14,7 @@ linters:
     - typecheck
     - goimports
     - misspell
+    - staticcheck
     - govet
     - revive
     - ineffassign
