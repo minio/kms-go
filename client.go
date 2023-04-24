@@ -165,6 +165,29 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 	return response.Version, nil
 }
 
+// IsReady reports whether the server is ready to serve requests.
+//
+// Since the readiness endpoint requires authentication, unless
+// disabled at the server, it may fail with ErrNotAllowed even
+// though the server might be ready to handle requests.
+func (c *Client) IsReady(ctx context.Context) (bool, error) {
+	const (
+		APIPath  = "/v1/ready"
+		Method   = http.MethodGet
+		StatusOK = http.StatusOK
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode == StatusOK, parseErrorResponse(resp)
+}
+
 // Status returns the current state of the KES server.
 func (c *Client) Status(ctx context.Context) (State, error) {
 	const (
