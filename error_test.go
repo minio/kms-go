@@ -5,6 +5,7 @@
 package kes
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,7 +27,7 @@ var newErrorTests = []struct {
 func TestNewError(t *testing.T) {
 	for i, test := range newErrorTests {
 		err := NewError(test.Code, test.Message)
-		if err != test.Err {
+		if !errors.Is(err, test.Err) {
 			t.Fatalf("Test %d: got %v - want %v", i, err, test.Err)
 		}
 	}
