@@ -5,42 +5,125 @@
 package kes
 
 import (
-	"encoding/json"
-	"errors"
-	"io"
+	"net/http"
+	"strings"
 	"time"
 )
 
-// Policy contains a set of rules that explicitly allow
-// or deny HTTP requests.
-//
-// These rules are specified as glob patterns. The rule
-// applies if the pattern matches the request URL path.
-// For more details on the glob syntax in general see [1]
-// and for the specific pattern syntax see [2].
-//
-// A policy contains two different rule sets:
-//   - Allow rules
-//   - Deny  rules
-//
-// A policy determines whether a request should be allowed
-// or denied in two steps. First, it iterates over all deny
-// rules. If any deny rules matches the given request then
-// the request is rejected. Then it iterates over all
-// allow rules. If any allow rule matches the given request
-// then the request is accepted. Otherwise, the request
-// is rejected by default.
-// Hence, a request is only accepted if at least one allow
-// rules and no deny rule matches the request. Also, a deny
-// rule takes precedence over an allow rule.
-//
-// [1]: https://en.wikipedia.org/wiki/Glob_(programming)
-// [2]: https://golang.org/pkg/path/#Match
-type Policy struct {
-	Allow []string // Set of allow patterns
-	Deny  []string // Set of deny patterns
+// A Rule controls HTTP requests and is part of a policy.
+type Rule struct{}
 
-	Info PolicyInfo // Info contains metadata for the Policy.
+// A Policy represents a set of rules that determine whether an HTTP request
+// is accepted or rejected. It consists of two sets of rules:
+// allow rules and deny rules.
+//
+// If any rule from the deny set matches an incoming HTTP request, the request
+// is rejected. Conversely, if any rule from the allow set matches, the request
+// is accepted. If no rule matches, the request is also rejected.
+// Therefore, an empty Policy, without any rules, rejects any request.
+//
+// A rule set is defined by a collection of API path patterns.
+// An API path pattern consists of the KES server API path and an
+// optional resource pattern. For example, "/v1/key/describe/my-key*"
+// consists of the "/v1/key/describe" API path and the resource
+// pattern "my-key*".
+//
+// When matching API path patterns:
+//   - If the resource pattern does not end with an asterisk ('*') character,
+//     the API path pattern only matches requests with an URL path equal to the pattern.
+//   - If the resource pattern ends with an asterisk ('*') character,
+//     the API path pattern matches if the API path pattern (without the asterisk) is a prefix of the URL path.
+//
+// An API path pattern cannot contain more than one asterisk character.
+// API path patterns can be viewed as a subset of glob patterns.
+//
+// Here's an example defining a policy:
+//
+//	policy := Policy{
+//	    Allow: map[string]kes.Rule{
+//	        "/v1/status": {},
+//	        "/v1/key/describe/my-key*": {},
+//	        "/v1/key/generate/my-key*": {},
+//	        "/v1/key/decrypt/my-key*": {},
+//	    },
+//	}
+type Policy struct {
+	Allow map[string]Rule // Set of allow rules
+	Deny  map[string]Rule // Set of deny rules
+
+	CreatedAt time.Time
+	CreatedBy Identity
+}
+
+// Verify reports whether the given HTTP request is allowed.
+// It returns no error if:
+//
+//	(1) No deny pattern matches the URL path *AND*
+//	(2) At least one allow pattern matches the URL path.
+//
+// Otherwise, Verify returns ErrNotAllowed.
+func (p *Policy) Verify(r *http.Request) error {
+	for pattern := range p.Deny {
+		if match(r.URL.Path, pattern) {
+			return ErrNotAllowed
+		}
+	}
+	for pattern := range p.Allow {
+		if match(r.URL.Path, pattern) {
+			return nil
+		}
+	}
+	return ErrNotAllowed
+}
+
+// IsSubset reports whether the Policy p is a subset of o.
+// If it is then any request allowed by p is also allowed
+// by o and any request rejected by o is also rejected by p.
+//
+// Usually, p is a subset of o when it contains less or
+// less generic allow rules and/or more or more generic
+// deny rules.
+//
+// Two policies, A and B, are equivalent, but not necessarily
+// equal, if:
+//
+//	A.IsSubset(B) && B.IsSubset(A)
+func (p *Policy) IsSubset(o *Policy) bool {
+	for allow := range p.Allow {
+
+		// First, we check whether p's allow rule set
+		// is a subset of o's allow rule set.
+		var matched bool
+		for pattern := range o.Allow {
+			if matched = match(pattern, allow); matched {
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+
+		// Next, we check whether one of p's allow rules
+		// matches any of o's deny rules. If so, p would
+		// allow something o denies unless p also contains
+		// a deny rule equal or more generic than o's.
+		for super := range o.Deny {
+			if !match(allow, super) {
+				continue
+			}
+
+			matched = false
+			for deny := range p.Deny {
+				if matched = match(deny, super); matched {
+					break
+				}
+			}
+			if !matched {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // PolicyInfo describes a KES policy.
@@ -50,160 +133,13 @@ type PolicyInfo struct {
 	CreatedBy Identity  `json:"created_by,omitempty"` // Identity that created the policy
 }
 
-// PolicyIterator iterates over a stream of PolicyInfo objects.
-// Close the PolicyIterator to release associated resources.
-type PolicyIterator struct {
-	decoder *json.Decoder
-	closer  io.Closer
-
-	current PolicyInfo
-	err     error
-	closed  bool
-}
-
-// Value returns the current PolicyInfo. It remains valid
-// until Next is called again.
-func (i *PolicyIterator) Value() PolicyInfo { return i.current }
-
-// Name returns the name of the current policy.
-// It is a short-hand for Value().Name.
-func (i *PolicyIterator) Name() string { return i.current.Name }
-
-// CreatedAt returns the created at timestamp of the current
-// policy. It is a short-hand for Value().CreatedAt.
-func (i *PolicyIterator) CreatedAt() time.Time { return i.current.CreatedAt }
-
-// CreatedBy returns the identiy that created the current policy.
-// It is a short-hand for Value().CreatedBy.
-func (i *PolicyIterator) CreatedBy() Identity { return i.current.CreatedBy }
-
-// Next returns true if there is another PolicyInfo.
-// It returns false if there are no more PolicyInfo
-// objects or when the PolicyIterator encounters an
-// error.
-func (i *PolicyIterator) Next() bool {
-	type Response struct {
-		Name      string    `json:"name"`
-		CreatedAt time.Time `json:"created_at"`
-		CreatedBy Identity  `json:"created_by"`
-
-		Err string `json:"error"`
-	}
-	if i.closed || i.err != nil {
+func match(pattern, s string) bool {
+	if pattern == "" {
 		return false
 	}
 
-	var resp Response
-	if err := i.decoder.Decode(&resp); err != nil {
-		if errors.Is(err, io.EOF) {
-			i.err = i.Close()
-		} else {
-			i.err = err
-		}
-		return false
+	if i := len(pattern) - 1; pattern[i] == '*' {
+		return strings.HasPrefix(s, pattern[:i])
 	}
-	if resp.Err != "" {
-		i.err = errors.New(resp.Err)
-		return false
-	}
-
-	i.current = PolicyInfo{
-		Name:      resp.Name,
-		CreatedAt: resp.CreatedAt,
-		CreatedBy: resp.CreatedBy,
-	}
-	return true
-}
-
-// WriteTo encodes and writes all remaining PolicyInfos
-// from its current iterator position to w. It returns
-// the number of bytes written to w and the first error
-// encounterred, if any.
-func (i *PolicyIterator) WriteTo(w io.Writer) (int64, error) {
-	type Response struct {
-		Name      string    `json:"name"`
-		CreatedAt time.Time `json:"created_at,omitempty"`
-		CreatedBy Identity  `json:"created_by,omitempty"`
-
-		Err string `json:"error,omitempty"`
-	}
-	if i.err != nil {
-		return 0, i.err
-	}
-	if i.closed {
-		return 0, errors.New("kes: WriteTo called after Close")
-	}
-
-	cw := countWriter{W: w}
-	encoder := json.NewEncoder(&cw)
-	for {
-		var resp Response
-		if err := i.decoder.Decode(&resp); err != nil {
-			if errors.Is(err, io.EOF) {
-				i.err = i.Close()
-			} else {
-				i.err = err
-			}
-			return cw.N, i.err
-		}
-		if resp.Err != "" {
-			i.err = errors.New(resp.Err)
-			return cw.N, i.err
-		}
-		if err := encoder.Encode(resp); err != nil {
-			i.err = err
-			return cw.N, err
-		}
-	}
-}
-
-// Values returns up to the next n PolicyInfo values. Subsequent
-// calls will yield further PolicyInfos if there are any.
-//
-// If n > 0, Values returns at most n PolicyInfo structs. In this case,
-// if Values returns an empty slice, it will return an error explaining
-// why. At the end of the listing, the error is io.EOF.
-//
-// If n <= 0, Values returns all remaining PolicyInfo records. In this
-// case, Values always closes the PolicyIterator. When it succeeds, it
-// returns a nil error, not io.EOF.
-func (i *PolicyIterator) Values(n int) ([]PolicyInfo, error) {
-	values := []PolicyInfo{}
-	if n > 0 && i.closed {
-		return values, io.EOF // Return early, don't alloc a slice
-	}
-	if n > 0 {
-		values = make([]PolicyInfo, 0, n)
-	}
-
-	var count int
-	for i.Next() {
-		values = append(values, i.Value())
-		count++
-
-		if n > 0 && count >= n {
-			return values, nil
-		}
-	}
-	if err := i.Close(); err != nil {
-		return values, err
-	}
-	if n > 0 && len(values) == 0 { // As by doc contract
-		return values, io.EOF
-	}
-	return values, nil
-}
-
-// Close closes the PolicyIterator and releases
-// any associated resources.
-func (i *PolicyIterator) Close() error {
-	if !i.closed {
-		err := i.closer.Close()
-		if i.err == nil {
-			i.err = err
-		}
-		i.closed = true
-		return err
-	}
-	return i.err
+	return s == pattern
 }

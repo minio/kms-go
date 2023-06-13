@@ -9,9 +9,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
-	"io"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,8 +18,6 @@ import (
 	"time"
 
 	"aead.dev/mem"
-	dto "github.com/prometheus/client_model/go"
-	"github.com/prometheus/common/expfmt"
 )
 
 // Client is a KES client. Usually, a new client is
@@ -79,18 +74,17 @@ type Client struct {
 	lb   *loadBalancer
 }
 
-// NewClient returns a new KES client with the given
-// KES server endpoint that uses the given TLS certificate
-// mTLS authentication.
-//
-// The TLS certificate must be valid for client authentication.
-//
-// NewClient uses an http.Transport with reasonable defaults.
-func NewClient(endpoint string, cert tls.Certificate) *Client {
+// NewClient returns a new KES client that uses an API key
+// for authentication.
+func NewClient(endpoint string, key APIKey, options ...CertificateOption) (*Client, error) {
+	cert, err := GenerateCertificate(key, options...)
+	if err != nil {
+		return nil, err
+	}
 	return NewClientWithConfig(endpoint, &tls.Config{
-		MinVersion:   tls.VersionTLS13,
+		MinVersion:   tls.VersionTLS12,
 		Certificates: []tls.Certificate{cert},
-	})
+	}), nil
 }
 
 // NewClientWithConfig returns a new KES client with the
@@ -265,31 +259,122 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 	return apis, nil
 }
 
+// ExpandCluster expands a KES cluster by adding a new node with
+// the given endpoint.
+func (c *Client) ExpandCluster(ctx context.Context, endpoint string) error {
+	const (
+		APIPath  = "/v1/cluster/expand"
+		Method   = http.MethodPut
+		StatusOK = http.StatusOK
+	)
+	type Request struct {
+		Endpoint string `json:"endpoint"`
+	}
+	c.init.Do(c.initLoadBalancer)
+
+	body, err := json.Marshal(Request{
+		Endpoint: endpoint,
+	})
+	if err != nil {
+		return err
+	}
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return parseErrorResponse(resp)
+	}
+	return nil
+}
+
+// DescribeCluster returns the KeyCluster for the current cluster.
+func (c *Client) DescribeCluster(ctx context.Context) (*ClusterInfo, error) {
+	const (
+		APIPath         = "/v1/cluster/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	type Response struct {
+		Nodes  map[uint64]string `json:"nodes"`
+		Leader uint64            `json:"leader_id"`
+	}
+	c.init.Do(c.initLoadBalancer)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+	var response Response
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return &ClusterInfo{
+		Nodes:  response.Nodes,
+		Leader: response.Leader,
+	}, nil
+}
+
+// ShrinkCluster shrinks a KES cluster by removingt the new node with
+// the given endpoint from the cluster.
+func (c *Client) ShrinkCluster(ctx context.Context, endpoint string) error {
+	const (
+		APIPath  = "/v1/cluster/shrink"
+		Method   = http.MethodDelete
+		StatusOK = http.StatusOK
+	)
+	type Request struct {
+		Endpoint string `json:"endpoint"`
+	}
+	c.init.Do(c.initLoadBalancer)
+
+	body, err := json.Marshal(Request{
+		Endpoint: endpoint,
+	})
+	if err != nil {
+		return err
+	}
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return parseErrorResponse(resp)
+	}
+	return nil
+}
+
 // CreateEnclave creates a new enclave with the given
 // identity as enclave admin. Only the KES system
 // admin can create new enclaves.
 //
 // It returns ErrEnclaveExists if the enclave already
 // exists.
-func (c *Client) CreateEnclave(ctx context.Context, name string, admin Identity) error {
+func (c *Client) CreateEnclave(ctx context.Context, name string) error {
 	const (
 		APIPath  = "/v1/enclave/create"
-		Method   = http.MethodPost
+		Method   = http.MethodPut
 		StatusOK = http.StatusOK
 	)
-	type Request struct {
-		Admin Identity `json:"admin"`
-	}
 	c.init.Do(c.initLoadBalancer)
 
-	body, err := json.Marshal(Request{
-		Admin: admin,
-	})
-	if err != nil {
-		return err
-	}
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, name), bytes.NewReader(body))
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -321,10 +406,6 @@ func (c *Client) DescribeEnclave(ctx context.Context, name string) (*EnclaveInfo
 	}
 	c.init.Do(c.initLoadBalancer)
 
-	if name == "" {
-		name = "default"
-	}
-
 	client := retry(c.HTTPClient)
 	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, name), nil)
 	if err != nil {
@@ -345,6 +426,48 @@ func (c *Client) DescribeEnclave(ctx context.Context, name string) (*EnclaveInfo
 		CreatedAt: response.CreatedAt,
 		CreatedBy: response.CreatedBy,
 	}, nil
+}
+
+// ListEnclaves returns a paginated list of enclave names from the server,
+// starting at the specified prefix. If n > 0, it returns at most n names.
+// Otherwise, the server determines the page size.
+//
+// ListEnclaves also returns a continuation token for fetching the next batch.
+// When the listing reaches the end, the continuation token will be empty.
+//
+// The ListIter type can be used as a convenient way to iterate over a paginated list.
+func (c *Client) ListEnclaves(ctx context.Context, prefix string, n int) ([]string, string, error) {
+	const (
+		APIPath         = "/v1/enclave/list"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	type Response struct {
+		Names      []string `json:"names"`
+		ContinueAt string   `json:"continue_at"`
+	}
+	c.init.Do(c.initLoadBalancer)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, prefix), nil)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, "", parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, "", err
+	}
+	if n > 0 && n < len(response.Names) {
+		return response.Names[:n], response.Names[n], nil
+	}
+	return response.Names, response.ContinueAt, nil
 }
 
 // DeleteEnclave delete the specified enclave. Only the
@@ -390,13 +513,13 @@ func (c *Client) CreateKey(ctx context.Context, name string) error {
 // ImportKey imports the given key into a KES server. It
 // returns ErrKeyExists if a key with the same key already
 // exists.
-func (c *Client) ImportKey(ctx context.Context, name string, key []byte) error {
+func (c *Client) ImportKey(ctx context.Context, name string, req *ImportKeyRequest) error {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
 		lb:         c.lb,
 	}
-	return enclave.ImportKey(ctx, name, key)
+	return enclave.ImportKey(ctx, name, req)
 }
 
 // DescribeKey returns the KeyInfo for the given key.
@@ -480,35 +603,21 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 	return enclave.Decrypt(ctx, name, ciphertext, context)
 }
 
-// DecryptAll decrypts all ciphertexts with the named key at the
-// KES server. It either returns all decrypted plaintexts or the
-// first decryption error.
+// ListKeys returns a paginated list of key names from the server,
+// starting at the specified prefix. If n > 0, it returns at most n names.
+// Otherwise, the server determines the page size.
 //
-// DecryptAll returns ErrKeyNotFound if the specified key does not
-// exist. It returns ErrDecrypt if any ciphertext has been modified
-// or a different context value was used.
-func (c *Client) DecryptAll(ctx context.Context, name string, ciphertexts ...CCP) ([]PCP, error) {
+// ListKeys also returns a continuation token for fetching the next batch.
+// When the listing reaches the end, the continuation token will be empty.
+//
+// The ListIter type can be used as a convenient way to iterate over a paginated list.
+func (c *Client) ListKeys(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
 		lb:         c.lb,
 	}
-	return enclave.DecryptAll(ctx, name, ciphertexts...)
-}
-
-// ListKeys lists all names of cryptographic keys that match the given
-// pattern. It returns a KeyIterator that iterates over all matched key
-// names.
-//
-// The pattern matching happens on the server side. If pattern is empty
-// the KeyIterator iterates over all key names.
-func (c *Client) ListKeys(ctx context.Context, pattern string) (*KeyIterator, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
-	}
-	return enclave.ListKeys(ctx, pattern)
+	return enclave.ListKeys(ctx, prefix, n)
 }
 
 // CreateSecret creates a new secret with the given name.
@@ -560,31 +669,33 @@ func (c *Client) DeleteSecret(ctx context.Context, name string) error {
 	return enclave.DeleteSecret(ctx, name)
 }
 
-// ListSecrets returns a SecretIter that iterates over all secrets
-// matching the pattern.
+// ListSecrets returns a paginated list of secret names from the server,
+// starting at the specified prefix. If n > 0, it returns at most n names.
+// Otherwise, the server determines the page size.
 //
-// The '*' pattern matches any secret. If pattern is empty the
-// SecretIter iterates over all secrets names.
-func (c *Client) ListSecrets(ctx context.Context, pattern string) (*SecretIter, error) {
+// ListSecrets also returns a continuation token for fetching the next batch.
+// When the listing reaches the end, the continuation token will be empty.
+//
+// The ListIter type can be used as a convenient way to iterate over a paginated list.
+func (c *Client) ListSecrets(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
 		lb:         c.lb,
 	}
-	return enclave.ListSecrets(ctx, pattern)
+	return enclave.ListSecrets(ctx, prefix, n)
 }
 
-// SetPolicy creates the given policy. If a policy with the same
-// name already exists, SetPolicy overwrites the existing policy
-// with the given one. Any existing identites will be assigned to
-// the given policy.
-func (c *Client) SetPolicy(ctx context.Context, name string, policy *Policy) error {
+// CreatePolicy creates a new policy.
+//
+// It returns ErrPolicyExists if such a policy already exists.
+func (c *Client) CreatePolicy(ctx context.Context, name string, policy *Policy) error {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
 		lb:         c.lb,
 	}
-	return enclave.SetPolicy(ctx, name, policy)
+	return enclave.CreatePolicy(ctx, name, policy)
 }
 
 // DescribePolicy returns the PolicyInfo for the given policy.
@@ -623,18 +734,21 @@ func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 	return enclave.DeletePolicy(ctx, name)
 }
 
-// ListPolicies lists all policy names that match the given pattern.
-// It returns a PolicyIterator that iterates over all matched policies.
+// ListPolicies returns a paginated list of policy names from the server,
+// starting at the specified prefix. If n > 0, it returns at most n names.
+// Otherwise, the server determines the page size.
 //
-// The pattern matching happens on the server side. If pattern is empty
-// ListPolicies returns all policy names.
-func (c *Client) ListPolicies(ctx context.Context, pattern string) (*PolicyIterator, error) {
+// ListPolicies also returns a continuation token for fetching the next batch.
+// When the listing reaches the end, the continuation token will be empty.
+//
+// The ListIter type can be used as a convenient way to iterate over a paginated list.
+func (c *Client) ListPolicies(ctx context.Context, prefix string, n int) ([]string, string, error) {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
 		lb:         c.lb,
 	}
-	return enclave.ListPolicies(ctx, pattern)
+	return enclave.ListPolicies(ctx, prefix, n)
 }
 
 // AssignPolicy assigns the policy to the identity.
@@ -690,17 +804,21 @@ func (c *Client) DeleteIdentity(ctx context.Context, identity Identity) error {
 	return enclave.DeleteIdentity(ctx, identity)
 }
 
-// ListIdentities lists all identites that match the given pattern.
+// ListIdentities returns a paginated list of identities from the server,
+// starting at the specified prefix. If n > 0, it returns at most n identities.
+// Otherwise, the server determines the page size.
 //
-// The pattern matching happens on the server side. If pattern is empty
-// ListIdentities returns all identities.
-func (c *Client) ListIdentities(ctx context.Context, pattern string) (*IdentityIterator, error) {
+// ListIdentities also returns a continuation token for fetching the next batch.
+// When the listing reaches the end, the continuation token will be empty.
+//
+// The ListIter type can be used as a convenient way to iterate over a paginated list.
+func (c *Client) ListIdentities(ctx context.Context, prefix string, n int) ([]Identity, string, error) {
 	enclave := Enclave{
 		Endpoints:  c.Endpoints,
 		HTTPClient: c.HTTPClient,
 		lb:         c.lb,
 	}
-	return enclave.ListIdentities(ctx, pattern)
+	return enclave.ListIdentities(ctx, prefix, n)
 }
 
 // AuditLog returns a stream of audit events produced by the
@@ -760,117 +878,12 @@ func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
 // It returns ErrNotAllowed if the client does not
 // have sufficient permissions to fetch server metrics.
 func (c *Client) Metrics(ctx context.Context) (Metric, error) {
-	const (
-		APIPath        = "/v1/metrics"
-		Method         = http.MethodGet
-		StatusOK       = http.StatusOK
-		MaxResponeSize = 1 * mem.MiB
-	)
-	c.init.Do(c.initLoadBalancer)
-
-	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
-	if err != nil {
-		return Metric{}, err
+	enclave := Enclave{
+		Endpoints:  c.Endpoints,
+		HTTPClient: c.HTTPClient,
+		lb:         c.lb,
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return Metric{}, parseErrorResponse(resp)
-	}
-
-	const (
-		MetricRequestOK         = "kes_http_request_success"
-		MetricRequestErr        = "kes_http_request_error"
-		MetricRequestFail       = "kes_http_request_failure"
-		MetricRequestActive     = "kes_http_request_active"
-		MetricAuditEvents       = "kes_log_audit_events"
-		MetricErrorEvents       = "kes_log_error_events"
-		MetricResponseTime      = "kes_http_response_time"
-		MetricSystemUpTme       = "kes_system_up_time"
-		MetricSystemCPUs        = "kes_system_num_cpu"
-		MetricSystemUsableCPUs  = "kes_system_num_cpu_used"
-		MetricSystemThreads     = "kes_system_num_threads"
-		MetricSystemHeapUsed    = "kes_system_mem_heap_used"
-		MetricSystemHeapObjects = "kes_system_mem_heap_objects"
-		MetricSystemStackUsed   = "kes_system_mem_stack_used"
-	)
-
-	var (
-		metric       Metric
-		metricFamily dto.MetricFamily
-	)
-	decoder := expfmt.NewDecoder(mem.LimitReader(resp.Body, MaxResponeSize), expfmt.ResponseFormat(resp.Header))
-	for {
-		err := decoder.Decode(&metricFamily)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return Metric{}, err
-		}
-
-		if len(metricFamily.Metric) == 0 {
-			return Metric{}, errors.New("kes: server response contains no metric")
-		}
-		var (
-			name = metricFamily.GetName()
-			kind = metricFamily.GetType()
-		)
-		switch {
-		case kind == dto.MetricType_COUNTER && name == MetricRequestOK:
-			for _, m := range metricFamily.GetMetric() {
-				metric.RequestOK += uint64(m.GetCounter().GetValue())
-			}
-		case kind == dto.MetricType_COUNTER && name == MetricRequestErr:
-			for _, m := range metricFamily.GetMetric() {
-				metric.RequestErr += uint64(m.GetCounter().GetValue())
-			}
-		case kind == dto.MetricType_COUNTER && name == MetricRequestFail:
-			for _, m := range metricFamily.GetMetric() {
-				metric.RequestFail += uint64(m.GetCounter().GetValue())
-			}
-		default:
-			if len(metricFamily.Metric) != 1 {
-				return Metric{}, errors.New("kes: server response contains more than one metric")
-			}
-			rawMetric := metricFamily.GetMetric()[0] // Safe since we checked length before
-			switch {
-			case kind == dto.MetricType_GAUGE && name == MetricRequestActive:
-				metric.RequestActive = uint64(rawMetric.GetGauge().GetValue())
-			case kind == dto.MetricType_COUNTER && name == MetricAuditEvents:
-				metric.AuditEvents = uint64(rawMetric.GetCounter().GetValue())
-			case kind == dto.MetricType_COUNTER && name == MetricErrorEvents:
-				metric.ErrorEvents = uint64(rawMetric.GetCounter().GetValue())
-			case kind == dto.MetricType_HISTOGRAM && name == MetricResponseTime:
-				metric.LatencyHistogram = map[time.Duration]uint64{}
-				for _, bucket := range rawMetric.GetHistogram().GetBucket() {
-					if math.IsInf(bucket.GetUpperBound(), 0) { // Ignore the +Inf bucket
-						continue
-					}
-
-					duration := time.Duration(1000*bucket.GetUpperBound()) * time.Millisecond
-					metric.LatencyHistogram[duration] = bucket.GetCumulativeCount()
-				}
-				delete(metric.LatencyHistogram, 0) // Delete the artificial zero entry
-			case kind == dto.MetricType_GAUGE && name == MetricSystemUpTme:
-				metric.UpTime = time.Duration(rawMetric.GetGauge().GetValue()) * time.Second
-			case kind == dto.MetricType_GAUGE && name == MetricSystemCPUs:
-				metric.CPUs = int(rawMetric.GetGauge().GetValue())
-			case kind == dto.MetricType_GAUGE && name == MetricSystemUsableCPUs:
-				metric.UsableCPUs = int(rawMetric.GetGauge().GetValue())
-			case kind == dto.MetricType_GAUGE && name == MetricSystemThreads:
-				metric.Threads = int(rawMetric.GetGauge().GetValue())
-			case kind == dto.MetricType_GAUGE && name == MetricSystemHeapUsed:
-				metric.HeapAlloc = uint64(rawMetric.GetGauge().GetValue())
-			case kind == dto.MetricType_GAUGE && name == MetricSystemHeapObjects:
-				metric.HeapObjects = uint64(rawMetric.GetGauge().GetValue())
-			case kind == dto.MetricType_GAUGE && name == MetricSystemStackUsed:
-				metric.StackAlloc = uint64(rawMetric.GetGauge().GetValue())
-			}
-		}
-	}
-	return metric, nil
+	return enclave.Metrics(ctx)
 }
 
 func (c *Client) initLoadBalancer() {

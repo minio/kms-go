@@ -24,7 +24,7 @@ var secretTypeStringTests = []struct {
 	{Type: 0, String: "generic"},             // 0
 	{Type: SecretGeneric, String: "generic"}, // 1
 
-	{Type: 1, String: "%1"}, // 2 - invalid type
+	{Type: 1, String: "%!1"}, // 2 - invalid type
 }
 
 func TestSecretType_MarshalText(t *testing.T) {

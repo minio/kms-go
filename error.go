@@ -19,14 +19,11 @@ import (
 
 // KES server API errors
 var (
-	// ErrSealed is returned by a KES server that got sealed.
-	// Such a KES server will not process any requests until
-	// unsealed again.
-	ErrSealed = NewError(http.StatusForbidden, "system is sealed")
-
 	// ErrNotAllowed is returned by a KES server when a client has
 	// not sufficient permission to perform the API operation.
 	ErrNotAllowed = NewError(http.StatusForbidden, "not authorized: insufficient permissions")
+
+	ErrPartialWrite = NewError(http.StatusServiceUnavailable, "change committed but not replicated")
 
 	// ErrKeyNotFound is returned by a KES server when a client tries to
 	// access or use a cryptographic key which does not exist.
@@ -40,13 +37,25 @@ var (
 	// access a secret which does not exist.
 	ErrSecretNotFound = NewError(http.StatusNotFound, "secret does not exist")
 
+	// ErrSecretVersionNotFound is returned by a KES server when a client tries to
+	// access a secret version which does not exist.
+	ErrSecretVersionNotFound = NewError(http.StatusNotFound, "secret version does not exist")
+
 	// ErrKeyExists is returned by a KES server when a client tries
 	// to create a secret which already exists.
 	ErrSecretExists = NewError(http.StatusNotFound, "secret already exists")
 
+	// ErrPolicyExists is returned by a KES server when a client tries
+	// to create a policy which already exists.
+	ErrPolicyExists = NewError(http.StatusBadRequest, "policy already exists")
+
 	// ErrPolicyNotFound is returned by a KES server when a client
 	// tries to access a policy which does not exist.
 	ErrPolicyNotFound = NewError(http.StatusNotFound, "policy does not exist")
+
+	// ErrIdentityExists is returned by a KES server when a client tries
+	// to create an identity which already exists.
+	ErrIdentityExists = NewError(http.StatusBadRequest, "identity already exists")
 
 	// ErrPolicyNotFound is returned by a KES server when a client
 	// tries to access a policy which does not exist.
@@ -174,10 +183,14 @@ func parseErrorResponse(resp *http.Response) error {
 	if strings.HasPrefix(contentType, "application/json") {
 		type Response struct {
 			Message string `json:"message"`
+			Error   string `json:"error"`
 		}
 		var response Response
 		if err := json.NewDecoder(mem.LimitReader(resp.Body, size)).Decode(&response); err != nil {
 			return err
+		}
+		if response.Error != "" {
+			response.Message = response.Error
 		}
 
 		// TODO(aead): Remove the backwards-compatibility error checks once enough of the

@@ -70,6 +70,7 @@ func withHeader(key, value string) requestOption {
 type loadBalancer struct {
 	lock      sync.Mutex
 	endpoints map[string]time.Time
+	enclave   string
 }
 
 // Send creates a new HTTP request with the given method, context
@@ -90,6 +91,9 @@ func (lb *loadBalancer) Send(ctx context.Context, client *retry, method string, 
 		request, err := http.NewRequestWithContext(ctx, method, endpoint(endpoints[0], path), retryBody(body))
 		if err != nil {
 			return nil, err
+		}
+		if lb.enclave != "" {
+			request.Header.Set("Kes-Enclave", lb.enclave)
 		}
 		for _, opt := range options {
 			opt(request)
@@ -138,6 +142,9 @@ retry:
 		request, err = http.NewRequestWithContext(ctx, method, endpoint(nextEndpoint, path), retryBody(body))
 		if err != nil {
 			return nil, err
+		}
+		if lb.enclave != "" {
+			request.Header.Set("Kes-Enclave", lb.enclave)
 		}
 		for _, opt := range options {
 			opt(request)

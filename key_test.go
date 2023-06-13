@@ -21,10 +21,9 @@ var keyAlgorithmStringTests = []struct {
 	Algorithm KeyAlgorithm
 	String    string
 }{
-	{Algorithm: KeyAlgorithmUndefined, String: "undefined"},
-	{Algorithm: AES256_GCM_SHA256, String: "AES256-GCM_SHA256"},
-	{Algorithm: XCHACHA20_POLY1305, String: "XCHACHA20-POLY1305"},
-	{Algorithm: XCHACHA20_POLY1305 + 1, String: "invalid algorithm '" + strconv.Itoa(int(XCHACHA20_POLY1305+1)) + "'"},
+	{Algorithm: AES256, String: "AES256"},
+	{Algorithm: ChaCha20, String: "ChaCha20"},
+	{Algorithm: ChaCha20 + 1, String: "%!" + strconv.Itoa(int(ChaCha20+1))},
 }
 
 func TestKeyAlgorithm_MarshalText(t *testing.T) {
@@ -49,10 +48,9 @@ var keyAlgorithmMarshalTextTests = []struct {
 	String     string
 	ShouldFail bool
 }{
-	{Algorithm: KeyAlgorithmUndefined, String: ""},
-	{Algorithm: AES256_GCM_SHA256, String: "AES256-GCM_SHA256"},
-	{Algorithm: XCHACHA20_POLY1305, String: "XCHACHA20-POLY1305"},
-	{Algorithm: XCHACHA20_POLY1305 + 1, ShouldFail: true},
+	{Algorithm: AES256, String: "AES256"},
+	{Algorithm: ChaCha20, String: "ChaCha20"},
+	{Algorithm: ChaCha20 + 1, ShouldFail: true},
 }
 
 func TestKeyAlgorithm_UnmarshalText(t *testing.T) {
@@ -78,10 +76,8 @@ var keyAlgorithmUnmarshalTextTests = []struct {
 	Algorithm  KeyAlgorithm
 	ShouldFail bool
 }{
-	{String: "", Algorithm: KeyAlgorithmUndefined},
-	{String: "undefined", Algorithm: KeyAlgorithmUndefined},
-	{String: "AES256-GCM_SHA256", Algorithm: AES256_GCM_SHA256},
-	{String: "XCHACHA20-POLY1305", Algorithm: XCHACHA20_POLY1305},
+	{String: "AES256", Algorithm: AES256},
+	{String: "ChaCha20", Algorithm: ChaCha20},
 
-	{String: "AES256-GCM-SHA256", Algorithm: AES256_GCM_SHA256, ShouldFail: true},
+	{String: "AES256-GCM-SHA256", ShouldFail: true},
 }
