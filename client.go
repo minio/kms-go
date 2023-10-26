@@ -139,7 +139,7 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
 	if err != nil {
 		return "", err
 	}
@@ -173,7 +173,7 @@ func (c *Client) IsReady(ctx context.Context) (bool, error) {
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
 	if err != nil {
 		return false, err
 	}
@@ -193,7 +193,7 @@ func (c *Client) Status(ctx context.Context) (State, error) {
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
 	if err != nil {
 		return State{}, err
 	}
@@ -226,7 +226,7 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +280,7 @@ func (c *Client) ExpandCluster(ctx context.Context, endpoint string) error {
 	}
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, bytes.NewReader(body))
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -307,7 +307,7 @@ func (c *Client) DescribeCluster(ctx context.Context) (*ClusterInfo, error) {
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +347,7 @@ func (c *Client) ShrinkCluster(ctx context.Context, endpoint string) error {
 	}
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, bytes.NewReader(body))
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -374,7 +374,7 @@ func (c *Client) CreateEnclave(ctx context.Context, name string) error {
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, name), nil)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -407,7 +407,7 @@ func (c *Client) DescribeEnclave(ctx context.Context, name string) (*EnclaveInfo
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, name), nil)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +450,7 @@ func (c *Client) ListEnclaves(ctx context.Context, prefix string, n int) ([]stri
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, prefix), nil)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, prefix), nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -484,7 +484,7 @@ func (c *Client) DeleteEnclave(ctx context.Context, name string) error {
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, join(APIPath, name), nil)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -837,7 +837,7 @@ func (c *Client) AuditLog(ctx context.Context) (*AuditStream, error) {
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -863,7 +863,7 @@ func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
 	c.init.Do(c.initLoadBalancer)
 
 	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, c.Endpoints, APIPath, nil)
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -888,7 +888,8 @@ func (c *Client) Metrics(ctx context.Context) (Metric, error) {
 
 func (c *Client) initLoadBalancer() {
 	if c.lb == nil {
-		c.lb = &loadBalancer{endpoints: map[string]time.Time{}}
+		c.lb = newLoadBalancer("")
+		c.lb.prepareLoadBalancer(c.Endpoints)
 	}
 }
 
