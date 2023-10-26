@@ -12,10 +12,199 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 )
+
+type dnsResolver interface {
+	LookupHost(ctx context.Context, host string) (addrs []string, err error)
+}
+
+type randomNumberGenerator interface {
+	Intn(n int) int
+}
+
+type loadBalancer struct {
+	enclave          string
+	endpoints        []*loadBalancerEndpoint
+	rand             randomNumberGenerator
+	DNSResolver      dnsResolver
+	getLocalNetworks func() ([]net.Addr, error)
+	sendRequest      func(context.Context, *endpointRequest) (*http.Response, error)
+}
+
+func newLoadBalancer(enclaveName string) *loadBalancer {
+	return &loadBalancer{
+		enclave:          enclaveName,
+		DNSResolver:      new(net.Resolver),
+		getLocalNetworks: net.InterfaceAddrs,
+		sendRequest:      sendRequest,
+		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
+}
+
+type loadBalancerEndpoint struct {
+	lock sync.Mutex
+	addr string
+	err  error
+
+	// local, if set to true, indicates that this endpoint
+	// is located on the same local network as the current host.
+	local bool
+	// localhost, if set to true, indicates that this endpoint
+	// is listening locally on IPv4 or IPv6.
+	localhost bool
+	// timeout is a timestamp indicating when this endpoint was
+	// placed in a timed-out state.
+	timeout time.Time
+	// timeoutProbe, if set to true, indicates that there is
+	// currently a probe request being made to determine the
+	// status of this endpoint.
+	timeoutProbe bool
+}
+
+func (le *loadBalancerEndpoint) isInTimeout() (timedOut, shouldProbe bool) {
+	defer le.lock.Unlock()
+	le.lock.Lock()
+	if le.timeout.IsZero() {
+		return false, false
+	} else if time.Since(le.timeout).Seconds() < 30 {
+		return true, false
+	}
+
+	if !le.timeoutProbe {
+		le.timeoutProbe = true
+		return false, true
+	}
+
+	return true, false
+}
+
+func (le *loadBalancerEndpoint) setTimeout(asProbe bool) {
+	defer le.lock.Unlock()
+	le.lock.Lock()
+	if le.timeout.IsZero() {
+		le.timeout = time.Now()
+	}
+	if asProbe {
+		le.timeoutProbe = false
+		le.timeout = time.Now()
+	}
+}
+
+func (le *loadBalancerEndpoint) clearTimeout() {
+	defer le.lock.Unlock()
+	le.lock.Lock()
+	le.timeout = time.Time{}
+	le.timeoutProbe = false
+}
+
+func (lb *loadBalancer) prepareLoadBalancer(endpoints []string) {
+	if len(endpoints) < 1 {
+		return
+	}
+	if lb.getLocalNetworks == nil {
+		lb.getLocalNetworks = net.InterfaceAddrs
+	}
+	if lb.DNSResolver == nil {
+		lb.DNSResolver = new(net.Resolver)
+	}
+	if lb.sendRequest == nil {
+		lb.sendRequest = sendRequest
+	}
+	if lb.rand == nil {
+		lb.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+	}
+
+	ifNetworks := make(map[string]*net.IPNet)
+	ifs, err := lb.getLocalNetworks()
+	if err == nil {
+		for _, v := range ifs {
+			netIP, ipNet, err := net.ParseCIDR(v.String())
+			if err == nil {
+				ifNetworks[netIP.String()] = ipNet
+			}
+		}
+	}
+
+	endpointCh := make(chan *loadBalancerEndpoint, len(endpoints))
+	for _, e := range endpoints {
+		go func(ep string) {
+			urlx, err := url.Parse(ep)
+			if err != nil {
+				endpointCh <- &loadBalancerEndpoint{err: err, addr: ep}
+				return
+			}
+
+			host := urlx.Hostname()
+			if host == "localhost" || host == "127.0.0.1" {
+				endpointCh <- &loadBalancerEndpoint{localhost: true, addr: ep}
+				return
+			}
+
+			IP := net.ParseIP(host)
+			if IP == nil {
+				ctx, cancelFunc := context.WithTimeout(
+					context.Background(),
+					time.Second*2,
+				)
+				defer cancelFunc()
+
+				addrs, err := lb.DNSResolver.LookupHost(ctx, host)
+				if err == nil && len(addrs) > 0 {
+					IP = net.ParseIP(addrs[0])
+				}
+			}
+
+			if IP != nil {
+				for i, v := range ifNetworks {
+					if i == IP.String() {
+						endpointCh <- &loadBalancerEndpoint{localhost: true, addr: ep}
+						return
+					}
+					if v.Contains(IP) {
+						endpointCh <- &loadBalancerEndpoint{local: true, addr: ep}
+						return
+					}
+				}
+			}
+
+			endpointCh <- &loadBalancerEndpoint{addr: ep}
+		}(e)
+	}
+
+	lb.endpoints = make([]*loadBalancerEndpoint, 0)
+	timeout := time.After(time.Second * 10)
+	returnCount := 0
+	for {
+		select {
+		case ea := <-endpointCh:
+			lb.endpoints = append(lb.endpoints, ea)
+			returnCount++
+			if returnCount == len(endpoints) {
+				goto DONE
+			}
+		case <-timeout:
+			goto DONE
+		}
+	}
+
+DONE:
+	close(endpointCh)
+	// Endpoints that are bound to local interfaces are sorted in the lowest indexes.
+	// Followed by endpoints that are within the local interface networks (CIDRs).
+	// Followed by endpoints that are NOT within the local interface networks (CIDRs).
+	slices.SortFunc(lb.endpoints, func(a, b *loadBalancerEndpoint) int {
+		if a.localhost {
+			return -1
+		} else if a.local && !b.localhost {
+			return -1
+		}
+		return 1
+	})
+}
 
 // retryBody takes an io.ReadSeeker and converts it
 // into an io.ReadCloser that can be used as request
@@ -58,126 +247,143 @@ func withHeader(key, value string) requestOption {
 	}
 }
 
-// loadBalancer sends HTTP requests to a set of endpoints.
-// For each request it picks an endpoint at random and
-// retries requests that fail due to a network error or
-// HTTP 5xx response.
+// Send
+// This method uses `loadBalancerEndpoint` from `loadBalancer.endpoints`
+// to send requests to KES instances.
 //
-// The loadBalancer marks endpoints as offline when they
-// fail to respond. Since an endpoint might have temp.
-// issues, offline endpoints will be marked online after
-// a while again.
-type loadBalancer struct {
-	lock      sync.Mutex
-	endpoints map[string]time.Time
-	enclave   string
-}
-
-// Send creates a new HTTP request with the given method, context
-// request body and request options, if any. It randomly iterates
-// over the given endpoints until it receives a HTTP response.
+// If loadBalancer.endpoints[0] is of type localhost then it will be prioritized
+// above other endpoints, but not excluded from timeouts due to errors.
 //
-// If sending a request to one endpoint fails due to e.g. a network
-// or DNS error, Send tries the next endpoint. It aborts once the
-// context is canceled or its deadline exceeded.
+// an endpoint will be selected at random if loadBalancer.endpoint[0] is in a timed-out
+// state or is NOT of type localhost.
 //
-// Any endpoint that fails to respond gets marked offline for some
-// time period. Offline endpoints will be marked online periodically.
-func (lb *loadBalancer) Send(ctx context.Context, client *retry, method string, endpoints []string, path string, body io.ReadSeeker, options ...requestOption) (*http.Response, error) {
-	if len(endpoints) == 0 {
+// An endpoint will be placed in a timed-out state if an error occures during
+// connection or transmission, more specifically if loadBalancer.sendRequest()
+// returns an error.
+//
+// Additionally 5xx error responses will trigger a timed-out state,
+// excluding 501 ( Not Implemented ).
+//
+// Endpoint timeouts will last for 30 seconds. Once the endpoint timeout
+// expires, a SINGLE request will be allowed to probe the endpoint in
+// order to determine its current status.
+func (lb *loadBalancer) Send(ctx context.Context, client *retry, method string, path string, body io.ReadSeeker, options ...requestOption) (*http.Response, error) {
+	if len(lb.endpoints) < 1 {
 		return nil, errors.New("kes: no server endpoint")
 	}
-	if len(endpoints) == 1 {
-		request, err := http.NewRequestWithContext(ctx, method, endpoint(endpoints[0], path), retryBody(body))
-		if err != nil {
-			return nil, err
-		}
-		if lb.enclave != "" {
-			request.Header.Set("Kes-Enclave", lb.enclave)
-		}
-		for _, opt := range options {
-			opt(request)
-		}
-		response, err := client.Do(request)
-		if errors.Is(err, context.Canceled) {
-			return nil, err
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, err
-		}
-		if urlErr, ok := err.(*url.Error); ok {
-			if connErr, ok := urlErr.Err.(*ConnError); ok {
-				return nil, connErr
-			}
-		}
-		return response, err
+
+	endpoint := lb.endpoints[0]
+	if endpoint.addr == "" {
+		return nil, errors.New("kes: invalid server endpoint")
+	}
+
+	endpointRequest := endpointRequest{
+		client:  client,
+		enclave: lb.enclave,
+		method:  method,
+		path:    path,
+		body:    body,
+		options: options,
+		addr:    endpoint.addr,
+	}
+
+	if len(lb.endpoints) == 1 {
+		return lb.sendRequest(ctx, &endpointRequest)
 	}
 
 	var (
-		request  *http.Request
-		response *http.Response
-		err      error
-		R        = rand.Intn(len(endpoints)) // randomize endpoints => avoid hitting the same endpoint all the time.
+		resp *http.Response
+		err  error
+	)
+
+	if endpoint.localhost {
+		isTimedout, shouldProbe := endpoint.isInTimeout()
+		if !isTimedout || shouldProbe {
+			resp, err = lb.sendRequest(ctx, &endpointRequest)
+			if err != nil || resp == nil {
+				endpoint.setTimeout(shouldProbe)
+			} else {
+				if resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode != http.StatusNotImplemented {
+					endpoint.setTimeout(shouldProbe)
+				} else {
+					if shouldProbe {
+						endpoint.clearTimeout()
+					}
+					return resp, nil
+				}
+			}
+		}
+	}
+
+	var (
+		endpointCount     = len(lb.endpoints)
+		tryCount          = 0
+		fullRetry         = false
+		R                 = lb.rand.Intn(len(lb.endpoints))
+		nextEndpointIndex int
 	)
 
 retry:
-	for i := range endpoints {
-		nextEndpoint := endpoints[(i+R)%len(endpoints)]
-
-		lb.lock.Lock()
-		t, ok := lb.endpoints[nextEndpoint]
-		switch {
-		case ok && !t.IsZero() && t.Before(time.Now().Add(5*time.Minute)):
-			lb.lock.Unlock()
-			continue
-		case ok && !t.IsZero():
-			// Reset time, so we do try this on other threads.
-			// A success will reset the time and re-enable the endpoint.
-			lb.endpoints[nextEndpoint] = time.Now()
-		case !ok:
-			lb.endpoints[nextEndpoint] = time.Time{}
-		}
-		lb.lock.Unlock()
-
-		request, err = http.NewRequestWithContext(ctx, method, endpoint(nextEndpoint, path), retryBody(body))
-		if err != nil {
-			return nil, err
-		}
-		if lb.enclave != "" {
-			request.Header.Set("Kes-Enclave", lb.enclave)
-		}
-		for _, opt := range options {
-			opt(request)
-		}
-
-		response, err = client.Do(request)
-		if errors.Is(err, context.Canceled) {
-			return nil, err
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, err
-		}
-		if err != nil || (response.StatusCode >= http.StatusInternalServerError && response.StatusCode != http.StatusNotImplemented) {
-			lb.lock.Lock()
-			lb.endpoints[nextEndpoint] = time.Now()
-			lb.lock.Unlock()
+	for tryCount < endpointCount {
+		tryCount++
+		nextEndpointIndex = (tryCount + R) % endpointCount
+		endpoint = lb.endpoints[nextEndpointIndex]
+		endpointRequest.addr = endpoint.addr
+		isTimedout, shouldProbe := endpoint.isInTimeout()
+		if !fullRetry && !shouldProbe && isTimedout {
 			continue
 		}
-
-		if !t.IsZero() { // When the request succeeded we mark the endpoint as online again
-			lb.lock.Lock()
-			lb.endpoints[nextEndpoint] = time.Time{}
-			lb.lock.Unlock()
+		resp, err = lb.sendRequest(ctx, &endpointRequest)
+		if err != nil || resp == nil {
+			endpoint.setTimeout(shouldProbe)
+			continue
 		}
-		return response, nil
+		if resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode != http.StatusNotImplemented {
+			endpoint.setTimeout(shouldProbe)
+			continue
+		}
+		if shouldProbe || fullRetry {
+			endpoint.clearTimeout()
+		}
+		return resp, nil
 	}
-	if response == nil && err == nil {
-		lb.lock.Lock()
-		for _, endpoint := range endpoints {
-			lb.endpoints[endpoint] = time.Time{}
-		}
-		lb.lock.Unlock()
+
+	if !fullRetry && resp == nil && err == nil {
+		fullRetry = true
+		tryCount = 0
 		goto retry
+	}
+	return resp, err
+}
+
+// endpointRequest wraps input parameters for the sendRequest function
+type endpointRequest struct {
+	client  *retry
+	addr    string
+	enclave string
+	method  string
+	path    string
+	body    io.ReadSeeker
+	options []requestOption
+}
+
+func sendRequest(ctx context.Context, epr *endpointRequest) (*http.Response, error) {
+	request, err := http.NewRequestWithContext(ctx, epr.method, endpoint(epr.addr, epr.path), retryBody(epr.body))
+	if err != nil {
+		return nil, err
+	}
+	if epr.enclave != "" {
+		request.Header.Set("Kes-Enclave", epr.enclave)
+	}
+	for _, opt := range epr.options {
+		opt(request)
+	}
+	response, err := epr.client.Do(request)
+	if errors.Is(err, context.Canceled) {
+		return nil, err
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return nil, err
 	}
 	if urlErr, ok := err.(*url.Error); ok {
 		if connErr, ok := urlErr.Err.(*ConnError); ok {

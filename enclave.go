@@ -126,7 +126,7 @@ func (e *Enclave) Metrics(ctx context.Context) (Metric, error) {
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, APIPath, nil)
+	resp, err := e.lb.Send(ctx, &client, Method, APIPath, nil)
 	if err != nil {
 		return Metric{}, err
 	}
@@ -244,7 +244,7 @@ func (e *Enclave) CreateKey(ctx context.Context, name string) error {
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -278,7 +278,7 @@ func (e *Enclave) ImportKey(ctx context.Context, name string, req *ImportKeyRequ
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return err
 	}
@@ -308,7 +308,7 @@ func (e *Enclave) DescribeKey(ctx context.Context, name string) (*KeyInfo, error
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +341,7 @@ func (e *Enclave) DeleteKey(ctx context.Context, name string) error {
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -396,7 +396,7 @@ func (e *Enclave) GenerateKey(ctx context.Context, name string, context []byte) 
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return DEK{}, err
 	}
@@ -446,7 +446,7 @@ func (e *Enclave) Encrypt(ctx context.Context, name string, plaintext, context [
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +495,7 @@ func (e *Enclave) Decrypt(ctx context.Context, name string, ciphertext, context 
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return nil, err
 	}
@@ -532,7 +532,7 @@ func (e *Enclave) ListKeys(ctx context.Context, prefix string, n int) ([]string,
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, prefix), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, prefix), nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -582,7 +582,7 @@ func (e *Enclave) CreateSecret(ctx context.Context, name string, value []byte, o
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), bytes.NewReader(body))
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -614,7 +614,7 @@ func (e *Enclave) DescribeSecret(ctx context.Context, name string) (*SecretInfo,
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -657,7 +657,7 @@ func (e *Enclave) ReadSecret(ctx context.Context, name string) ([]byte, *SecretI
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -691,7 +691,7 @@ func (e *Enclave) DeleteSecret(ctx context.Context, name string) error {
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -722,7 +722,7 @@ func (e *Enclave) ListSecrets(ctx context.Context, prefix string, n int) ([]stri
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, prefix), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, prefix), nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -763,7 +763,7 @@ func (e *Enclave) AssignPolicy(ctx context.Context, policy string, identity Iden
 		return err
 	}
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, policy), bytes.NewReader(body))
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, policy), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -791,7 +791,7 @@ func (e *Enclave) CreatePolicy(ctx context.Context, name string, policy *Policy)
 		return err
 	}
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
 	if err != nil {
 		return err
 	}
@@ -819,7 +819,7 @@ func (e *Enclave) DescribePolicy(ctx context.Context, name string) (*PolicyInfo,
 		CreatedBy Identity  `json:"created_by"`
 	}
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -859,7 +859,7 @@ func (e *Enclave) GetPolicy(ctx context.Context, name string) (*Policy, error) {
 		CreatedBy Identity        `json:"created_by"`
 	}
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -894,7 +894,7 @@ func (e *Enclave) DeletePolicy(ctx context.Context, name string) error {
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, name), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
 	if err != nil {
 		return err
 	}
@@ -924,7 +924,7 @@ func (e *Enclave) ListPolicies(ctx context.Context, prefix string, n int) ([]str
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, prefix), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, prefix), nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -975,7 +975,7 @@ func (e *Enclave) CreateIdentity(ctx context.Context, identity Identity, req *Cr
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, identity.String()), bytes.NewReader(body))
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, identity.String()), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -1008,7 +1008,7 @@ func (e *Enclave) DescribeIdentity(ctx context.Context, identity Identity) (*Ide
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, identity.String()), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, identity.String()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1069,7 +1069,7 @@ func (e *Enclave) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, err
 	}
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, APIPath, nil)
+	resp, err := e.lb.Send(ctx, &client, Method, APIPath, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1119,7 +1119,7 @@ func (e *Enclave) DeleteIdentity(ctx context.Context, identity Identity) error {
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, identity.String()), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, identity.String()), nil)
 	if err != nil {
 		return err
 	}
@@ -1149,7 +1149,7 @@ func (e *Enclave) ListIdentities(ctx context.Context, prefix string, n int) ([]I
 	e.init.Do(e.initLoadBalancer)
 
 	client := retry(e.HTTPClient)
-	resp, err := e.lb.Send(ctx, &client, Method, e.Endpoints, join(APIPath, prefix), nil)
+	resp, err := e.lb.Send(ctx, &client, Method, join(APIPath, prefix), nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1169,7 +1169,7 @@ func (e *Enclave) ListIdentities(ctx context.Context, prefix string, n int) ([]I
 
 func (e *Enclave) initLoadBalancer() {
 	if e.lb == nil {
-		e.lb = &loadBalancer{endpoints: map[string]time.Time{}}
-		e.lb.enclave = e.Name
+		e.lb = newLoadBalancer(e.Name)
+		e.lb.prepareLoadBalancer(e.Endpoints)
 	}
 }
