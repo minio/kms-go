@@ -4,7 +4,38 @@
 
 package kes
 
-import "testing"
+import (
+	"net/http"
+	"net/url"
+	"testing"
+)
+
+func TestPolicyVerify(t *testing.T) {
+	const (
+		BaseURL = "https://127.0.0.1:7373"
+		Method  = http.MethodPut
+	)
+	for i, test := range policyVerifyTests {
+		for path, allow := range test.Requests {
+			url, err := url.JoinPath(BaseURL, path)
+			if err != nil {
+				t.Fatalf("Test %d: failed to create URL for path '%s': %v", i, path, err)
+			}
+			req, err := http.NewRequest(Method, url, nil)
+			if err != nil {
+				t.Fatalf("Test %d: failed to create req for URL '%s': %v", i, url, err)
+			}
+
+			err = test.Policy.Verify(req)
+			if err == nil && !allow {
+				t.Fatalf("Test %d: request '%s' should be rejected", i, path)
+			}
+			if err != nil && allow {
+				t.Fatalf("Test %d: request '%s' should be allowed: %v", i, path, err)
+			}
+		}
+	}
+}
 
 func TestPolicyIsSubset(t *testing.T) {
 	for i, test := range policyIsSubsetTests {
@@ -26,6 +57,56 @@ func TestPolicyIsSubset(t *testing.T) {
 			}
 		}
 	}
+}
+
+var policyVerifyTests = []struct {
+	Policy   *Policy
+	Requests map[string]bool
+}{
+	{ // 0
+		Policy: &Policy{},
+		Requests: map[string]bool{
+			"/v1/status":            false,
+			"/v1/key/create/my-key": false,
+			"/v1/identity/list/a":   false,
+		},
+	},
+	{ // 1
+		Policy: &Policy{Allow: map[string]Rule{"/v1/status": {}}},
+		Requests: map[string]bool{
+			"/v1/status":            true,
+			"/v1/key/create/my-key": false,
+			"/v1/identity/list/a":   false,
+		},
+	},
+	{ // 2
+		Policy: &Policy{Allow: map[string]Rule{
+			"/v1/key/create/my*":   {},
+			"/v1/key/create/your*": {},
+		}},
+		Requests: map[string]bool{
+			"/v1/key/create/my-key":     true,
+			"/v1/key/create/your-key":   true,
+			"/v1/identity/list/somekey": false,
+		},
+	},
+	{ // 3
+		Policy: &Policy{
+			Allow: map[string]Rule{
+				"/v1/key/create/my*":   {},
+				"/v1/key/create/your*": {},
+			},
+			Deny: map[string]Rule{
+				"/v1/key/create/my-key*": {},
+			},
+		},
+		Requests: map[string]bool{
+			"/v1/key/create/my-key":         false,
+			"/v1/key/create/my-key1":        false,
+			"/v1/key/create/my-minio-key":   true,
+			"/v1/key/create/your-minio-key": true,
+		},
+	},
 }
 
 var policyIsSubsetTests = []struct {

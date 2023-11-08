@@ -64,12 +64,12 @@ type Policy struct {
 // Otherwise, Verify returns ErrNotAllowed.
 func (p *Policy) Verify(r *http.Request) error {
 	for pattern := range p.Deny {
-		if match(r.URL.Path, pattern) {
+		if match(pattern, r.URL.Path) {
 			return ErrNotAllowed
 		}
 	}
 	for pattern := range p.Allow {
-		if match(r.URL.Path, pattern) {
+		if match(pattern, r.URL.Path) {
 			return nil
 		}
 	}
