@@ -68,9 +68,6 @@ func ParseAPIKey(s string) (APIKey, error) {
 		Header      = "kes:v1:"
 		Ed25519Type = 0
 	)
-	if !strings.HasPrefix(s, Header) {
-		return nil, errors.New("kes: invalid API key: missing 'kes:v1:' prefix")
-	}
 	b, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(s, Header))
 	if err != nil {
 		return nil, err

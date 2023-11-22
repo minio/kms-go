@@ -10,7 +10,7 @@ import (
 	"log"
 	"testing"
 
-	"github.com/minio/kes-go"
+	"github.com/minio/kms-go/kes"
 )
 
 func ExampleParseAPIKey() {

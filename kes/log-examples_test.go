@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/minio/kes-go"
+	"github.com/minio/kms-go/kes"
 )
 
 const AuditStream = `{"time":"2023-03-24T12:37:33Z","request":{"path":"/v1/log/audit","identity":"dd46485bedc9ad2909d2e8f9017216eec4413bc5c64b236d992f7ec19c843c5f"},"response":{"code":200, "time":12106}}

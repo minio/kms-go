@@ -1,4 +1,4 @@
-module github.com/minio/kes-go
+module github.com/minio/kms-go/kes
 
 go 1.21
 
