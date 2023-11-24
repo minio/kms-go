@@ -39,7 +39,7 @@ import (
 type Identity string
 
 // An APIKey represents a public/private key pair.
-
+//
 // An API key can be used to authenticate to a TLS server via
 // mTLS¹ by generating a X.509 certificate from the API key's
 // public key.

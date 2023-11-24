@@ -22,13 +22,13 @@ jobs:
       uses: actions/checkout@v3
     - name: Build
       run: |
-         cd ./kms && go build ./... && go vet ./... && cd ..
-         cd ./kes && go build ./... && go vet ./... && cd ..
+         go build ./kms ./kes
+         go vet ./kms ./kes
     - name: Lint
       uses: golangci/golangci-lint-action@v3
       with:
         version: latest
-        args: --config ./.golangci.yml
+        args: --config ./.golangci.yml ./kms ./kes
   test:
     name: Test ${{ matrix.os }}
     needs: Build
@@ -46,8 +46,7 @@ jobs:
       uses: actions/checkout@v3
     - name: Test
       run: | 
-        cd ./kms && go test ./... && cd ..
-        cd ./kes && go test ./... && cd ..
+        go test ./kms ./kes
   
   vulncheck:
     name: Vulncheck
@@ -65,6 +64,5 @@ jobs:
       shell: bash
     - name: Run govulncheck
       run: |
-        cd ./kms && govulncheck ./... && cd ..
-        cd ./kes && govulncheck ./... && cd ..
+        govulncheck ./kms ./kes
       shell: bash
