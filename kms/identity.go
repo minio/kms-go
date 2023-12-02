@@ -38,6 +38,8 @@ import (
 // [3] https://en.wikipedia.org/wiki/HTTP_Public_Key_Pinning
 type Identity string
 
+func (i Identity) String() string { return string(i) }
+
 // An APIKey represents a public/private key pair.
 //
 // An API key can be used to authenticate to a TLS server via

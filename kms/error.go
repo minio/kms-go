@@ -1,0 +1,78 @@
+// Copyright 2023 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
+package kms
+
+import (
+	"bytes"
+	"io"
+	"net/http"
+	"strings"
+
+	"aead.dev/mem"
+	"github.com/minio/kms-go/kms/internal/headers"
+	pb "github.com/minio/kms-go/kms/protobuf"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+)
+
+// MinIO KMS API errors.
+var (
+	// ErrEnclaveExists is returned when trying to create an enclave
+	// that already exists.
+	ErrEnclaveExists = Error{http.StatusConflict, "enclave already exists"}
+
+	// ErrEnclaveNotFound is returned when trying to operate within
+	// an enclave that does not exist. For example, when trying to
+	// create a key in a non-existing enclave.
+	ErrEnclaveNotFound = Error{http.StatusNotFound, "enclave does not exist"}
+)
+
+// Error is a KMS API error.
+type Error struct {
+	Code int    // The HTTP response status code
+	Err  string // The error message
+}
+
+// Status returns the Error's HTTP response status code.
+func (e Error) Status() int { return e.Code }
+
+// Error returns the Error's error string.
+func (e Error) Error() string { return e.Err }
+
+// readError returns the Error it reads from the response body.
+func readError(resp *http.Response) Error {
+	const MaxSize = 5 * mem.KB
+
+	size := mem.Size(resp.ContentLength)
+	if size <= 0 || size > MaxSize {
+		size = MaxSize
+	}
+	body := mem.LimitReader(resp.Body, size)
+
+	if ct := resp.Header.Get(headers.ContentType); ct == headers.ContentTypeBinary || ct == headers.ContentTypeJSON {
+		var buf bytes.Buffer
+		if _, err := buf.ReadFrom(body); err != nil {
+			return Error{Code: resp.StatusCode, Err: err.Error()}
+		}
+
+		var response pb.ErrResponse
+		if ct == headers.ContentTypeBinary {
+			if err := proto.Unmarshal(buf.Bytes(), &response); err != nil {
+				return Error{Code: resp.StatusCode, Err: err.Error()}
+			}
+		} else {
+			if err := protojson.Unmarshal(buf.Bytes(), &response); err != nil {
+				return Error{Code: resp.StatusCode, Err: err.Error()}
+			}
+		}
+		return Error{Code: resp.StatusCode, Err: response.Message}
+	}
+
+	var sb strings.Builder
+	if _, err := io.Copy(&sb, body); err != nil {
+		return Error{Code: resp.StatusCode, Err: err.Error()}
+	}
+	return Error{Code: resp.StatusCode, Err: sb.String()}
+}

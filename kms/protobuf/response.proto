@@ -1,0 +1,47 @@
+// Copyright 2023 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
+
+// Generate the Go protobuf code by running the protobuf compiler
+// from the repository root:
+//
+//   $ protoc -I=./kms/protobuf --go_out=. ./kms/protobuf/*.proto
+
+syntax = "proto3";
+
+package minio.kms;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "kms/protobuf";
+
+message ErrResponse {
+   string Message = 1 [json_name="message" ];
+}
+
+message NodeStatusResponse {
+  string Version = 1                               [ json_name="version" ];
+  string Addr = 2                                  [ json_name="address" ];
+  string State = 3                                 [ json_name="state" ];
+  uint64 Commit = 4                                [ json_name="commit" ]; 
+  map<uint32,string> Nodes = 5                     [ json_name="nodes" ];
+  uint32 ID = 6                                    [ json_name="node_id" ];
+  sint64 LeaderID = 7                              [ json_name="leader_id" ];
+  google.protobuf.Duration LastHeartbeat = 8       [ json_name="last_heartbeat" ];
+  google.protobuf.Duration HeartbeatInterval = 9   [ json_name="heartbeat_interval" ];
+  google.protobuf.Duration ElectionTimeout = 10    [ json_name="election_timeout" ]; 
+  google.protobuf.Duration UpTime = 11             [ json_name="sys_uptime" ];
+  string OS = 12                                   [ json_name="sys_os" ];
+  string Arch = 13                                 [ json_name="sys_cpu_arch" ];
+  uint32 CPUs = 14                                 [ json_name="sys_cpu_num" ];
+  uint32 UsableCPUs = 15                           [ json_name="sys_cpu_used" ];
+  uint64 HeapMemInUse = 16                         [ json_name="sys_mem_heap_used" ];
+  uint64 StackMemInUse = 17                        [ json_name="sys_mem_stack_used" ];
+}
+
+message StatusResponse {
+  map<uint32,NodeStatusResponse> nodesUp = 1 [ json_name="nodes_up" ];
+  map<uint32,string> nodesDown = 2 [ json_name="nodes_down" ];
+}
