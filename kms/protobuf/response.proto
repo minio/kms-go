@@ -2,7 +2,6 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-
 // Generate the Go protobuf code by running the protobuf compiler
 // from the repository root:
 //
@@ -12,36 +11,126 @@ syntax = "proto3";
 
 package minio.kms;
 
-import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
 option go_package = "kms/protobuf";
 
 message ErrResponse {
-   string Message = 1 [json_name="message" ];
+  string Message = 1 [json_name="message" ];
 }
 
 message NodeStatusResponse {
-  string Version = 1                               [ json_name="version" ];
-  string Addr = 2                                  [ json_name="address" ];
-  string State = 3                                 [ json_name="state" ];
-  uint64 Commit = 4                                [ json_name="commit" ]; 
-  map<uint32,string> Nodes = 5                     [ json_name="nodes" ];
-  uint32 ID = 6                                    [ json_name="node_id" ];
-  sint64 LeaderID = 7                              [ json_name="leader_id" ];
-  google.protobuf.Duration LastHeartbeat = 8       [ json_name="last_heartbeat" ];
-  google.protobuf.Duration HeartbeatInterval = 9   [ json_name="heartbeat_interval" ];
-  google.protobuf.Duration ElectionTimeout = 10    [ json_name="election_timeout" ]; 
-  google.protobuf.Duration UpTime = 11             [ json_name="sys_uptime" ];
-  string OS = 12                                   [ json_name="sys_os" ];
-  string Arch = 13                                 [ json_name="sys_cpu_arch" ];
-  uint32 CPUs = 14                                 [ json_name="sys_cpu_num" ];
-  uint32 UsableCPUs = 15                           [ json_name="sys_cpu_used" ];
-  uint64 HeapMemInUse = 16                         [ json_name="sys_mem_heap_used" ];
-  uint64 StackMemInUse = 17                        [ json_name="sys_mem_stack_used" ];
+  // Version is the version of the KMS server. It's the timestamp of
+  // the latest commit formatted as 'yyyy-mm-ddThh-mm-ssZ'. For example,
+  // "2023-12-01T16-06-52Z"
+  string Version = 1 [ json_name="version" ];
+
+  // APIVersion is the API version supported by the KMS server.
+  // For example, "v1".
+  string APIVersion = 2 [ json_name="api_version" ];
+
+  // Addr is the KMS server address as 'host' or 'host:port'. 
+  string Addr = 3 [ json_name="address" ];
+
+  // Role is the current role the KMS server node has within the cluster.
+  // Either, "Leader", "Follower" or "Candidate". 
+  string Role = 4 [ json_name="role" ];
+
+  // Commit is the number of state changes applied to this KMS server.
+  uint64 Commit = 5 [ json_name="commit" ];
+
+  // Nodes is a list of KMS server nodes within the KMS cluster as a map
+  // of node IDs to KMS server addresses of the form 'host' or 'host:port'. 
+  map<uint32,string> Nodes = 6 [ json_name="nodes" ];
+
+  // ID is the node ID of this KMS server. It only changes if the node
+  // joins a cluster.
+  uint32 ID = 7 [ json_name="node_id" ];
+
+  // LeaderID is the ID of the current cluster leader or negative if
+  // the cluster has no leader.
+  sint64 LeaderID = 8 [ json_name="leader_id" ];
+
+  // LastHeartbeat is the duration since the KMS server has sent or received
+  // a heartbeat. As long as there is a cluster leader, it should be lower
+  // than the ElectionTimeout.
+  google.protobuf.Duration LastHeartbeat = 9 [ json_name="last_heartbeat" ];
+  
+  // HeartbeatInterval defines the frequency in which this KMS server, as cluster
+  // leader, sends heartbeats to its follower nodes. All nodes within a cluster
+  // should use the same heartbeat interval.
+  google.protobuf.Duration HeartbeatInterval = 10 [ json_name="heartbeat_interval" ];
+
+  // ElectionTimeout defines how long a KMS server node waits for heartbeats before
+  // it considers the cluster leaders as down and starts a leader election to become
+  // the cluster leader itself.
+  // Each cluster node should have a slightly different election timeout to avoid
+  // spliting votes. Typically, base election timeout + random jitter. The average
+  // or base election timeout of all cluster nodes should be balanced with the
+  // HeartbeatInterval to prevent nodes from starting elections even though a leader
+  // is present. A reasonable default may be ElectionTimeout = 3 * HeartbeatInterval.
+  google.protobuf.Duration ElectionTimeout = 11 [ json_name="election_timeout" ]; 
+
+  // UpTime is the amount of time the KMS server is up and running.
+  google.protobuf.Duration UpTime = 12 [ json_name="sys_uptime" ];
+
+  // OS identifies the operating system the KMS server is running on.
+  // For example, "linux" or "darwin". 
+  string OS = 13 [ json_name="sys_os" ];
+
+  // Arch is the CPU architecture of the KMS server. For example, "amd64".
+  string Arch = 14 [ json_name="sys_cpu_arch" ];
+
+  // CPUs is the number of logical CPUs that can execite the KMS server process.
+  // However, the KMS server may not use all of these CPUs. It might be limited
+  // to fewer CPUs.
+  uint32 CPUs = 15 [ json_name="sys_cpu_num" ];
+
+  // UsableCPUs is the number of CPUs actually used by the KMS server process.
+  // Unless the KMS server has been limited to fewer CPUs, equal to CPUs field.
+  uint32 UsableCPUs = 16 [ json_name="sys_cpu_used" ];
+
+  // HeapMemInUse is the amount of heap memory currently occupied by the KMS server.
+  // The total amount of memory used by the KMS server process is HeapMemInUse +
+  // StackMemInUse.
+  uint64 HeapMemInUse = 17 [ json_name="sys_mem_heap_used" ];
+  
+  // StackMemInUse is the amount of stack memory currently occupied by the KMS server.
+  // The total amount of memory used by the KMS server process is HeapMemInUse +
+  // StackMemInUse.
+  uint64 StackMemInUse = 18 [ json_name="sys_mem_stack_used" ];
 }
 
 message StatusResponse {
   map<uint32,NodeStatusResponse> nodesUp = 1 [ json_name="nodes_up" ];
   map<uint32,string> nodesDown = 2 [ json_name="nodes_down" ];
 }
+
+message EncryptResponse {
+  // Version identifies the particular key within a key ring used to encrypt
+  // the message.
+  uint32 Version = 1 [ json_name = "version" ];
+
+  // Ciphertext is the encrypted message.
+  bytes Ciphertext = 2 [ json_name = "ciphertext" ];
+}
+
+message DecryptResponse {
+  // Plaintext is the decrypted message.
+  bytes Plaintext = 1 [ json_name = "plaintext" ];
+}
+
+message GenerateKeyResponse {
+  // Version identifies the particular key within a key ring used to generate
+  // and encrypt this data encryption key.
+  uint32 Version = 1 [ json_name = "version" ];
+
+  // Plaintext is the plain data encryption key. It may be used by clients to
+  // perform crypto. operations.
+  bytes Plaintext = 2 [ json_name = "plaintext"];
+
+  // Ciphertext is the encrypted data encryption key. Clients should store it
+  // to obtain the plain data encryption key in the future again.
+  bytes Ciphertext = 3 [ json_name = "ciphertext" ];
+}
+

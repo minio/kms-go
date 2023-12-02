@@ -27,6 +27,14 @@ var (
 	// an enclave that does not exist. For example, when trying to
 	// create a key in a non-existing enclave.
 	ErrEnclaveNotFound = Error{http.StatusNotFound, "enclave does not exist"}
+
+	// ErrKeyExists is returned when trying to create a key in an
+	// enclave that already contains a key with the same name.
+	ErrKeyExists = Error{http.StatusConflict, "key already exists"}
+
+	// ErrKeyNotFound is returned when trying to use a key that
+	// that does not exist.
+	ErrKeyNotFound = Error{http.StatusNotFound, "key does not exist"}
 )
 
 // Error is a KMS API error.

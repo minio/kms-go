@@ -5,6 +5,7 @@
 package kms
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
@@ -149,16 +150,11 @@ func (c *Client) NodeStatus(ctx context.Context, endpoint string, _ *NodeStatusR
 		return nil, readError(resp)
 	}
 
-	var data pb.NodeStatusResponse
+	var data NodeStatusResponse
 	if err := readResponse(resp, &data); err != nil {
 		return nil, err
 	}
-
-	var stat NodeStatusResponse
-	if err := stat.UnmarshalPB(&data); err != nil {
-		return nil, err
-	}
-	return &stat, nil
+	return &data, nil
 }
 
 // Status returns status information about the entire KMS cluster. The
@@ -192,16 +188,161 @@ func (c *Client) Status(ctx context.Context, _ *StatusRequest) (*StatusResponse,
 		return nil, readError(resp)
 	}
 
-	var data pb.StatusResponse
+	var data StatusResponse
 	if err := readResponse(resp, &data); err != nil {
 		return nil, err
 	}
+	return &data, nil
+}
 
-	var stat StatusResponse
-	if err := stat.UnmarshalPB(&data); err != nil {
+// Encrypt encrypts a message with the key within the given enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and
+// ErrKeyNotFound if no such key exists.
+func (c *Client) Encrypt(ctx context.Context, enclave, key string, req *EncryptRequest) (*EncryptResponse, error) {
+	const (
+		Method      = http.MethodPut
+		Path        = api.PathSecretKeyEncrypt
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	body, err := pb.Marshal(req)
+	if err != nil {
 		return nil, err
 	}
-	return &stat, nil
+
+	url, err := c.lb.URL(Path, key)
+	if err != nil {
+		return nil, err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data EncryptResponse
+	if err := readResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// Decrypt decrypts a ciphertext with the key within the given enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and
+// ErrKeyNotFound if no such key exists.
+func (c *Client) Decrypt(ctx context.Context, enclave, key string, req *DecryptRequest) (*DecryptResponse, error) {
+	const (
+		Method      = http.MethodPut
+		Path        = api.PathSecretKeyDecrypt
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	url, err := c.lb.URL(Path, key)
+	if err != nil {
+		return nil, err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data DecryptResponse
+	if err := readResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// GenerateKey generates a new unique data encryption key. The returned
+// GenerateKeyResponse contains a plaintext data encryption key with
+// the requested length and a ciphertext version. The ciphertext
+// is the plaintext data encryption key encrypted with the key within
+// the given enclave.
+//
+// Applications should use, but never store, the plaintext data encryption
+// key for cryptographic operations and remember the ciphertext version of
+// the data encryption key. For example, encrypt a file with the plaintext
+// data encryption key and store the ciphertext version of data encryption
+// key alongside the encrypted file.
+// The plaintext data encryption key can be obtained by decrypting the
+// ciphertext data encryption key using Decrypt.
+//
+// Applications should also persist the key version that is used to prepare
+// for future key rotation.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and
+// ErrKeyNotFound if no such key exists.
+func (c *Client) GenerateKey(ctx context.Context, enclave, key string, req *GenerateKeyRequest) (*GenerateKeyResponse, error) {
+	const (
+		Method      = http.MethodPut
+		Path        = api.PathSecretKeyGenerate
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	url, err := c.lb.URL(Path, key)
+	if err != nil {
+		return nil, err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data GenerateKeyResponse
+	if err := readResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
 }
 
 // httpsURL turns the endpoint into an HTTPS endpoint.
