@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -120,9 +121,9 @@ type Client struct {
 	lb     *https.LoadBalancer
 }
 
-// NodeStatus returns the status of the KMS node at the given endpoint.
+// ServerStatus returns the status of the KMS node at the given endpoint.
 // For status information about the entire KMS cluster use Status.
-func (c *Client) NodeStatus(ctx context.Context, endpoint string, _ *NodeStatusRequest) (*NodeStatusResponse, error) {
+func (c *Client) ServerStatus(ctx context.Context, endpoint string, _ *NodeStatusRequest) (*ServerStatusResponse, error) {
 	const (
 		Method      = http.MethodGet
 		Path        = api.PathStatus
@@ -150,17 +151,17 @@ func (c *Client) NodeStatus(ctx context.Context, endpoint string, _ *NodeStatusR
 		return nil, readError(resp)
 	}
 
-	var data NodeStatusResponse
+	var data ServerStatusResponse
 	if err := readResponse(resp, &data); err != nil {
 		return nil, err
 	}
 	return &data, nil
 }
 
-// Status returns status information about the entire KMS cluster. The
-// returned StatusResponse contains status information for all nodes
-// within the cluster.
-func (c *Client) Status(ctx context.Context, _ *StatusRequest) (*StatusResponse, error) {
+// ClusterStatus returns status information about the entire KMS cluster.
+// The returned CLusterStatusResponse contains status information for all
+// nodes within the cluster.
+func (c *Client) ClusterStatus(ctx context.Context, _ *StatusRequest) (*ClusterStatusResponse, error) {
 	const (
 		Method      = http.MethodGet
 		Path        = api.PathClusterStatus
@@ -188,18 +189,399 @@ func (c *Client) Status(ctx context.Context, _ *StatusRequest) (*StatusResponse,
 		return nil, readError(resp)
 	}
 
-	var data StatusResponse
+	var data ClusterStatusResponse
 	if err := readResponse(resp, &data); err != nil {
 		return nil, err
 	}
 	return &data, nil
 }
 
-// Encrypt encrypts a message with the key within the given enclave.
+// AddNode adds the KMS server at req.Host to the current KMS cluster.
+// It returns an error if the server is already part of the cluster.
+//
+// Nodes can only join a cluster if the cluster has a leader. The KMS
+// server at req.Host must be fresh in the sense that it must not be
+// part of a multi-node cluster already.
+func (c *Client) AddNode(ctx context.Context, req *AddNodeRequest) error {
+	const (
+		Method      = http.MethodPut
+		Path        = api.PathClusterAdd
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Host)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+
+	c.lb.Hosts = append(c.lb.Hosts, req.Host)
+	return nil
+}
+
+// RemoveNode removes the KMS server at req.Host from the current KMS
+// cluster. It returns an error if the server is not part of the cluster.
+func (c *Client) RemoveNode(ctx context.Context, req *RemoveNodeRequest) error {
+	const (
+		Method      = http.MethodPut
+		Path        = api.PathClusterRemove
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Host)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+
+	hosts := make([]string, 0, len(c.lb.Hosts))
+	for _, host := range c.lb.Hosts {
+		if host != req.Host {
+			hosts = append(hosts, host)
+		}
+	}
+	c.lb.Hosts = hosts
+	return nil
+}
+
+// CreateEnclave creates a new enclave with the name req.Name.
+//
+// It returns ErrEnclaveExists if such an enclave already exists.
+func (c *Client) CreateEnclave(ctx context.Context, req *CreateEnclaveRequest) error {
+	const (
+		Method      = http.MethodPut
+		Path        = api.PathEnclaveCreate
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
+}
+
+// DescribeEnclave returns metadata about the enclave with the
+// the name req.Name.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
 // ErrKeyNotFound if no such key exists.
-func (c *Client) Encrypt(ctx context.Context, enclave, key string, req *EncryptRequest) (*EncryptResponse, error) {
+func (c *Client) DescribeEnclave(ctx context.Context, req *DescribeEnclaveRequest) (*DescribeEnclaveResponse, error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathEnclaveDescribe
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return nil, err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data DescribeEnclaveResponse
+	if err := readResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// DeleteEnclave deletes the enclave with the name req.Name.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists.
+func (c *Client) DeleteEnclave(ctx context.Context, req *DeleteEnclaveRequest) error {
+	const (
+		Method      = http.MethodDelete
+		Path        = api.PathEnclaveDelete
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
+}
+
+// ListEnclaveNames returns a list of enclaves names. The list starts at
+// the given req.Prefix and req.ContinueAt and contains at most req.Limit
+// names.
+//
+// ListEnclaveNames implements paginated listing. For iterating over a stream
+// of enclave names combine it with an Iter.
+func (c *Client) ListEnclaveNames(ctx context.Context, req *ListRequest) (*ListResponse[string], error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathEnclaveList
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+
+		QueryContinue = api.QueryListContinue
+		QueryLimit    = api.QueryListLimit
+	)
+
+	query := url.Values{}
+	if req.ContinueAt != "" {
+		query[QueryContinue] = []string{req.ContinueAt}
+	}
+	if req.Limit > 0 {
+		query[QueryLimit] = []string{strconv.Itoa(req.Limit)}
+	}
+
+	url, err := c.lb.URL(Path, req.Prefix)
+	if err != nil {
+		return nil, err
+	}
+	if len(query) > 0 {
+		url += "?" + query.Encode()
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data pb.ListEnclaveNamesResponse
+	if err = readProtoResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &ListResponse[string]{
+		Items:      data.Names,
+		ContinueAt: data.ContinueAt,
+	}, nil
+}
+
+// CreateKey creates a new key with the name req.Key with req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyExists
+// if such a key already exists.
+func (c *Client) CreateKey(ctx context.Context, req *CreateKeyRequest) error {
+	const (
+		Method      = http.MethodPut
+		Path        = api.PathSecretKeyCreate
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	url, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
+}
+
+// DescribeKeyVersion returns metadata about the req.Key within
+// the req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and
+// ErrKeyNotFound if no such key exists.
+func (c *Client) DescribeKeyVersion(ctx context.Context, req *DescribeKeyVersionRequest) (*DescribeKeyVersionResponse, error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathSecretKeyDescribe
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Key)
+	if err != nil {
+		return nil, err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data DescribeKeyVersionResponse
+	if err := readResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// ListKeyNames returns a list of key names. The list starts at the given
+// req.Prefix and req.ContinueAt and contains at most req.Limit names.
+//
+// ListKeyNames implements paginated listing. For iterating over a stream
+// of key names combine it with an Iter.
+func (c *Client) ListKeyNames(ctx context.Context, req *ListRequest) (*ListResponse[string], error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathSecretKeyList
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+
+		QueryContinue = api.QueryListContinue
+		QueryLimit    = api.QueryListLimit
+	)
+
+	query := url.Values{}
+	if req.ContinueAt != "" {
+		query[QueryContinue] = []string{req.ContinueAt}
+	}
+	if req.Limit > 0 {
+		query[QueryLimit] = []string{strconv.Itoa(req.Limit)}
+	}
+
+	url, err := c.lb.URL(Path, req.Prefix)
+	if err != nil {
+		return nil, err
+	}
+	if len(query) > 0 {
+		url += "?" + query.Encode()
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data pb.ListKeyNamesResponse
+	if err = readProtoResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &ListResponse[string]{
+		Items:      data.Names,
+		ContinueAt: data.ContinueAt,
+	}, nil
+}
+
+// Encrypt encrypts the req.Plaintext with the req.Key within
+// the req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and
+// ErrKeyNotFound if no such key exists.
+func (c *Client) Encrypt(ctx context.Context, req *EncryptRequest) (*EncryptResponse, error) {
 	const (
 		Method      = http.MethodPut
 		Path        = api.PathSecretKeyEncrypt
@@ -212,7 +594,7 @@ func (c *Client) Encrypt(ctx context.Context, enclave, key string, req *EncryptR
 		return nil, err
 	}
 
-	url, err := c.lb.URL(Path, key)
+	url, err := c.lb.URL(Path, req.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +603,7 @@ func (c *Client) Encrypt(ctx context.Context, enclave, key string, req *EncryptR
 		return nil, err
 	}
 	r.Header.Set(headers.Accept, ContentType)
-	r.Header.Set(headers.Enclave, enclave)
+	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
@@ -240,11 +622,12 @@ func (c *Client) Encrypt(ctx context.Context, enclave, key string, req *EncryptR
 	return &data, nil
 }
 
-// Decrypt decrypts a ciphertext with the key within the given enclave.
+// Decrypt decrypts the req.Ciphertext with the req.Key within
+// the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
 // ErrKeyNotFound if no such key exists.
-func (c *Client) Decrypt(ctx context.Context, enclave, key string, req *DecryptRequest) (*DecryptResponse, error) {
+func (c *Client) Decrypt(ctx context.Context, req *DecryptRequest) (*DecryptResponse, error) {
 	const (
 		Method      = http.MethodPut
 		Path        = api.PathSecretKeyDecrypt
@@ -257,7 +640,7 @@ func (c *Client) Decrypt(ctx context.Context, enclave, key string, req *DecryptR
 		return nil, err
 	}
 
-	url, err := c.lb.URL(Path, key)
+	url, err := c.lb.URL(Path, req.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +649,7 @@ func (c *Client) Decrypt(ctx context.Context, enclave, key string, req *DecryptR
 		return nil, err
 	}
 	r.Header.Set(headers.Accept, ContentType)
-	r.Header.Set(headers.Enclave, enclave)
+	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
@@ -304,7 +687,7 @@ func (c *Client) Decrypt(ctx context.Context, enclave, key string, req *DecryptR
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
 // ErrKeyNotFound if no such key exists.
-func (c *Client) GenerateKey(ctx context.Context, enclave, key string, req *GenerateKeyRequest) (*GenerateKeyResponse, error) {
+func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*GenerateKeyResponse, error) {
 	const (
 		Method      = http.MethodPut
 		Path        = api.PathSecretKeyGenerate
@@ -317,7 +700,7 @@ func (c *Client) GenerateKey(ctx context.Context, enclave, key string, req *Gene
 		return nil, err
 	}
 
-	url, err := c.lb.URL(Path, key)
+	url, err := c.lb.URL(Path, req.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +709,7 @@ func (c *Client) GenerateKey(ctx context.Context, enclave, key string, req *Gene
 		return nil, err
 	}
 	r.Header.Set(headers.Accept, ContentType)
-	r.Header.Set(headers.Enclave, enclave)
+	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {

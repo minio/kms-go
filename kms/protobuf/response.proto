@@ -12,6 +12,7 @@ syntax = "proto3";
 package minio.kms;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "kms/protobuf";
 
@@ -19,7 +20,22 @@ message ErrResponse {
   string Message = 1 [json_name="message" ];
 }
 
-message NodeStatusResponse {
+message VersionResponse {
+  // Version is the version of the KMS server. It's the timestamp of
+  // the latest commit formatted as 'yyyy-mm-ddThh-mm-ssZ'. For example,
+  // "2023-12-01T16-06-52Z"
+  string Version = 1 [ json_name="version" ];
+
+  // Commit is the commit ID of the most latest code change of the KMS
+  // server.
+  string Commit = 2  [ json_name="commit"  ];
+
+  // APIVersion is the API version supported by the KMS server.
+  // For example, "v1".
+  string APIVersion = 3 [ json_name="api_version" ];
+}
+
+message ServerStatusResponse {
   // Version is the version of the KMS server. It's the timestamp of
   // the latest commit formatted as 'yyyy-mm-ddThh-mm-ssZ'. For example,
   // "2023-12-01T16-06-52Z"
@@ -101,9 +117,71 @@ message NodeStatusResponse {
   uint64 StackMemInUse = 18 [ json_name="sys_mem_stack_used" ];
 }
 
-message StatusResponse {
-  map<uint32,NodeStatusResponse> nodesUp = 1 [ json_name="nodes_up" ];
+message ClusterStatusResponse {
+  map<uint32,ServerStatusResponse> nodesUp = 1 [ json_name="nodes_up" ];
   map<uint32,string> nodesDown = 2 [ json_name="nodes_down" ];
+}
+
+message DescribeEnclaveResponse {
+  // Name is the name of the enclave.
+  string Name = 1 [ json_name = "name" ];
+
+  // CreatedAt is the point in time when this enclave got created.
+  google.protobuf.Timestamp CreatedAt = 2 [ json_name = "created_at" ];
+
+  // CreatedBy is the identity that created this enclave.
+  string CreatedBy = 3 [ json_name = "created_by" ];
+}
+
+message DescribeRouteResponse {
+  // Method is the HTTP method of the API.
+  string Method = 1 [ json_name="method" ];
+
+  // Path is the request URL path.
+  string Path = 2 [ json_name="path" ];
+
+  // MaxBody is the max. request body length accepted by the API.
+  // If < 0, no length limit is enforced.
+  int64 MaxBody = 3 [ json_name="max_body" ];
+
+  // Timeout defines how long a request can take before the API handler
+  // aborts the request and returns a HTTP timeout error.
+  google.protobuf.Duration Timeout = 4 [ json_name="timeout" ];
+}
+
+message ListAPIsResponse {
+  repeated DescribeRouteResponse APIs = 1;
+}
+
+message ListEnclaveNamesResponse {
+  // Names is the list of enclave names.
+  repeated string Names = 1 [ json_name = "names" ];
+
+  string ContinueAt = 2 [ json_name = "continue_at" ];
+}
+
+message DescribeKeyVersionResponse {
+  // Name is the name of the key.
+  string Name = 1 [ json_name="name" ];
+
+  // Version is the this key's version within the key ring.
+  uint32 Version = 2 [ json_name="version" ];
+
+  // The is the key type. For example, "AES256".
+  string Type = 3 [ json_name="type" ];
+
+  // CreatedAt is the point in time when this key version got created.
+  google.protobuf.Timestamp CreatedAt = 4 [ json_name="created_at" ];
+
+  // CreatedBy is the identity that created the key version.
+  string CreatedBy = 5 [ json_name="created_by" ];
+}
+
+message ListKeyNamesResponse {
+  // Names is the list of key names.
+  repeated string Names = 1 [ json_name = "names" ];
+
+  string ContinueAt = 2 [ json_name = "continue_at" ];
 }
 
 message EncryptResponse {

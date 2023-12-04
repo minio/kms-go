@@ -4,7 +4,39 @@
 
 package kms
 
-import pb "github.com/minio/kms-go/kms/protobuf"
+import (
+	pb "github.com/minio/kms-go/kms/protobuf"
+)
+
+// ListRequest contains generic options for listing elements,
+// like enclaves or keys.
+type ListRequest struct {
+	// Prefix is an optional prefix to start the listing from.
+	// For example, an application may want to list all keys
+	// starting with "foo", like "foo-1" and "foobar".
+	//
+	// Only elements with a name that match this prefix are
+	// returned by list operations. An empty prefix matches
+	// any name.
+	Prefix string
+
+	// ContinueAt specifies an element name from where to
+	// continue a list operation. When listing a lot of
+	// elements, not all may fit into a single ListResponse.
+	// Applications can paginate through a long list of
+	// elements by setting a ContinueAt value.
+	//
+	// ContinueAt must match an element's name exactly.
+	// Using a ContinueAt value that does not start with
+	// the Prefix will lead to an empty listing result.
+	ContinueAt string
+
+	// Limit limits the number of elements returned by
+	// a list operation. If <= 0, no limit is specified
+	// and the server limits listing results to a
+	// reasonable max. size.
+	Limit int
+}
 
 // NodeStatusRequest contains options for fetching status
 // information for one particular KMS cluster node.
@@ -14,9 +46,99 @@ type NodeStatusRequest struct{}
 // status information.
 type StatusRequest struct{}
 
+// AddNodeRequest describes which KMS server to add to an existing.
+type AddNodeRequest struct {
+	// Host is the KMS server that should join a cluster.
+	// It must be of the form "host" or "host:port".
+	Host string
+}
+
+// RemoveNodeRequest describes which server to remove from a KMS
+// cluster.
+type RemoveNodeRequest struct {
+	// Host is the KMS server that should leave a cluster.
+	// It must be of the form "host" or "host:port".
+	Host string
+}
+
+// CreateEnclaveRequest contains options for creating enclaves.
+type CreateEnclaveRequest struct {
+	// Name is the name of the enclave to create.
+	Name string
+}
+
+// DescribeEnclaveRequest contains options for fetching metadata
+// about an enclave.
+type DescribeEnclaveRequest struct {
+	// Name is the name of the enclave to delete.
+	Name string
+}
+
+// DeleteEnclaveRequest contains options for deleting enclaves.
+type DeleteEnclaveRequest struct {
+	// Name is the name of the enclave to delete.
+	Name string
+}
+
+// CreateKeyRequest contains options for creating secret keys.
+type CreateKeyRequest struct {
+	// Enclave is the KMS enclave in which the key is created.
+	Enclave string
+
+	// Name is the name of the key to create.
+	Name string
+
+	// Type of the key that is created. If not set, the server
+	// will pick the key type.
+	Type SecretKeyType
+}
+
+// MarshalPB converts the CreateKeyRequest into its protobuf representation.
+func (r *CreateKeyRequest) MarshalPB(v *pb.CreateKeyRequest) error {
+	if r.Type == 0 {
+		v.Type = nil
+	} else {
+		v.Type = new(string)
+		*v.Type = r.Type.String()
+	}
+	return nil
+}
+
+// UnmarshalPB initializes the CreateKeyRequest from its protobuf representation.
+func (r *CreateKeyRequest) UnmarshalPB(v *pb.CreateKeyRequest) error {
+	if v.Type == nil {
+		r.Type = 0
+		return nil
+	}
+
+	t, err := secretKeyTypeFromString(v.GetType())
+	if err != nil {
+		return err
+	}
+
+	r.Type = t
+	return nil
+}
+
+// DescribeKeyVersionRequest contains options for fetching
+// metadata about a key version.
+type DescribeKeyVersionRequest struct {
+	// Enclave is the KMS enclave containing the master key.
+	Enclave string
+
+	// Key is the name of the master key.
+	Key string
+}
+
 // EncryptRequest contains a plaintext message that should be encrypted and
 // associated data that is crypto. bound to the resulting ciphertext.
 type EncryptRequest struct {
+	// Enclave is the KMS enclave containing the master key.
+	Enclave string
+
+	// Key is the name of the master key.
+	Key string
+
 	// Plaintext is the plain message that is encrypted.
 	Plaintext []byte
 
@@ -45,6 +167,12 @@ func (r *EncryptRequest) UnmarshalPB(v *pb.EncryptRequest) error {
 
 // GenerateKeyRequest contains options for generating a new unique data encryption key.
 type GenerateKeyRequest struct {
+	// Enclave is the KMS enclave containing the master key.
+	Enclave string
+
+	// Key is the name of the master key.
+	Key string
+
 	// AssociatedData is additional data that is not encrypted but crypto. bound
 	// to the ciphertext of the data encryption key. The same associated data must
 	// be provided when decrypting the ciphertext.
@@ -80,6 +208,10 @@ func (r *GenerateKeyRequest) UnmarshalPB(v *pb.GenerateKeyRequest) error {
 
 // DecryptRequest contains a ciphertext message that should be decrypted.
 type DecryptRequest struct {
+	Enclave string
+
+	Key string
+
 	// Version identifies the key version within the key ring that should be
 	// used to decrypt the ciphertext.
 	Version int

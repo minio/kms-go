@@ -13,6 +13,12 @@ package minio.kms;
 
 option go_package = "kms/protobuf";
 
+message CreateKeyRequest {
+  // Type is the type of the created key. If not set, the KMS server picks
+  // the key type.
+  optional string Type = 1 [ json_name = "type" ];
+}
+
 message EncryptRequest {
   // Version identifies the key version within the key ring used to encrypt
   // the plaintext. If not present, the latest key version is used.

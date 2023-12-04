@@ -22,6 +22,21 @@ import (
 // to a reasonable size. It returns an error if it cannot
 // determine the response content length before decoding.
 func readResponse[M any, P pb.Pointer[M], T pb.Unmarshaler[P]](r *http.Response, v T) error {
+	var m M
+	var p P = &m
+	if err := readProtoResponse(r, p); err != nil {
+		return err
+	}
+	return v.UnmarshalPB(p)
+}
+
+// readResponse reads the response body into v using the
+// response content encoding.
+//
+// readBesponse assumes that the response body is limited
+// to a reasonable size. It returns an error if it cannot
+// determine the response content length before decoding.
+func readProtoResponse(r *http.Response, v proto.Message) error {
 	if r.ContentLength < 0 {
 		return Error{http.StatusLengthRequired, "request content length is negative"}
 	}
@@ -32,23 +47,57 @@ func readResponse[M any, P pb.Pointer[M], T pb.Unmarshaler[P]](r *http.Response,
 		return err
 	}
 
-	var m M
-	var p P = &m
 	if r.Header.Get(headers.ContentType) == headers.ContentTypeBinary {
-		if err := proto.Unmarshal(buf, p); err != nil {
-			return err
-		}
-	} else {
-		if err := protojson.Unmarshal(buf, p); err != nil {
-			return err
-		}
+		return proto.Unmarshal(buf, v)
 	}
-	return v.UnmarshalPB(p)
+	return protojson.Unmarshal(buf, v)
 }
 
-// NodeStatusResponse contains status information about a single
+// ListResponse is a generic listing response. It contains
+// a list of elements of type T and an optional name from
+// where to continue the listing from. See also: ListResult.
+type ListResponse[T any] struct {
+	// Items is the next page of a list operation.
+	Items []T
+
+	// ContinueAt is the name of the next element from where
+	// to resume or continue the listing.
+	ContinueAt string
+}
+
+// VersionResponse contains version information about a KMS server.
+type VersionResponse struct {
+	// Version is the version of the KMS server. It's the timestamp of
+	// the latest commit formatted as 'yyyy-mm-ddThh-mm-ssZ'. For example,
+	// "2023-12-01T16-06-52Z"
+	Version string
+
+	// Commit is the commit ID of the most latest code change of the KMS
+	// server.
+	Commit string
+
+	// APIVersion is the API version supported by the KMS server.
+	// For example, "v1".
+	APIVersion string
+}
+
+// MarshalPB converts the VersionResponse into its protobuf representation.
+func (r *VersionResponse) MarshalPB(v *pb.VersionResponse) error {
+	v.Version = r.Version
+	v.Commit = r.Commit
+	return nil
+}
+
+// UnmarshalPB initializes the VersionResponse from its protobuf representation.
+func (r *VersionResponse) UnmarshalPB(v *pb.VersionResponse) error {
+	r.Version = v.Version
+	r.Commit = v.Commit
+	return nil
+}
+
+// ServerStatusResponse contains status information about a single
 // KMS cluster node.
-type NodeStatusResponse struct {
+type ServerStatusResponse struct {
 	// Version is the version of the KMS server. It's the timestamp of
 	// the latest commit formatted as 'yyyy-mm-ddThh-mm-ssZ'. For example,
 	// "2023-12-01T16-06-52Z"
@@ -133,8 +182,8 @@ type NodeStatusResponse struct {
 	StackMemInUse uint64
 }
 
-// MarshalPB converts the NodeStatusResponse into its protobuf representation.
-func (s *NodeStatusResponse) MarshalPB(v *pb.NodeStatusResponse) error {
+// MarshalPB converts the ServerStatusResponse into its protobuf representation.
+func (s *ServerStatusResponse) MarshalPB(v *pb.ServerStatusResponse) error {
 	v.Version = s.Version
 	v.APIVersion = s.APIVersion
 	v.Addr = s.Endpoint
@@ -158,8 +207,8 @@ func (s *NodeStatusResponse) MarshalPB(v *pb.NodeStatusResponse) error {
 	return nil
 }
 
-// UnmarshalPB initializes the NodeStatusResponse from its protobuf representation.
-func (s *NodeStatusResponse) UnmarshalPB(v *pb.NodeStatusResponse) error {
+// UnmarshalPB initializes the ServerStatusResponse from its protobuf representation.
+func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
 	s.Version = v.Version
 	s.APIVersion = v.APIVersion
 	s.Endpoint = v.Addr
@@ -183,27 +232,27 @@ func (s *NodeStatusResponse) UnmarshalPB(v *pb.NodeStatusResponse) error {
 	return nil
 }
 
-// StatusResponse contains status information about a KMS cluster.
+// ClusterStatusResponse contains status information about a KMS cluster.
 //
 // The overall view of the current cluster status, in particular
 // which nodes are reachable, may vary from node to node in case
 // of network partitions. For example, two nodes within two network
 // partitions will consider themselves as up and their peer as down.
-type StatusResponse struct {
+type ClusterStatusResponse struct {
 	// NodesUp is a map of node IDs to the corresponding node status
 	// information.
-	NodesUp map[int]*NodeStatusResponse
+	NodesUp map[int]*ServerStatusResponse
 
 	// NodesDown is a map of node IDs to node addresses containing
 	// all nodes that were not reachable or failed to respond in time.
 	NodesDown map[int]string
 }
 
-// MarshalPB converts the StatusResponse into its protobuf representation.
-func (s *StatusResponse) MarshalPB(v *pb.StatusResponse) error {
-	v.NodesUp = make(map[uint32]*pb.NodeStatusResponse, len(s.NodesUp))
+// MarshalPB converts the ClusterStatusResponse into its protobuf representation.
+func (s *ClusterStatusResponse) MarshalPB(v *pb.ClusterStatusResponse) error {
+	v.NodesUp = make(map[uint32]*pb.ServerStatusResponse, len(s.NodesUp))
 	for id, resp := range s.NodesUp {
-		stat := new(pb.NodeStatusResponse)
+		stat := new(pb.ServerStatusResponse)
 		if err := resp.MarshalPB(stat); err != nil {
 			return err
 		}
@@ -217,11 +266,11 @@ func (s *StatusResponse) MarshalPB(v *pb.StatusResponse) error {
 	return nil
 }
 
-// UnmarshalPB initializes the StatusResponse from its protobuf representation.
-func (s *StatusResponse) UnmarshalPB(v *pb.StatusResponse) error {
-	s.NodesUp = make(map[int]*NodeStatusResponse, len(v.NodesUp))
+// UnmarshalPB initializes the ClusterStatusResponse from its protobuf representation.
+func (s *ClusterStatusResponse) UnmarshalPB(v *pb.ClusterStatusResponse) error {
+	s.NodesUp = make(map[int]*ServerStatusResponse, len(v.NodesUp))
 	for id, resp := range v.NodesUp {
-		stat := new(NodeStatusResponse)
+		stat := new(ServerStatusResponse)
 		if err := stat.UnmarshalPB(resp); err != nil {
 			return err
 		}
@@ -232,6 +281,77 @@ func (s *StatusResponse) UnmarshalPB(v *pb.StatusResponse) error {
 	for id, addr := range v.NodesDown {
 		s.NodesDown[int(id)] = addr
 	}
+	return nil
+}
+
+// DescribeEnclaveResponse contains information about an enclave.
+type DescribeEnclaveResponse struct {
+	// Name is the name of the enclave.
+	Name string
+
+	// CreatedAt is the point in time when the enclave has been created.
+	CreatedAt time.Time
+
+	// CreatedBy is the identity that created the enclave.
+	CreatedBy Identity
+}
+
+// MarshalPB converts the DescribeEnclaveResponse into its protobuf representation.
+func (r *DescribeEnclaveResponse) MarshalPB(v *pb.DescribeEnclaveResponse) error {
+	v.Name = r.Name
+	v.CreatedAt = pb.Time(r.CreatedAt)
+	v.CreatedBy = r.CreatedBy.String()
+	return nil
+}
+
+// UnmarshalPB initializes the DescribeEnclaveResponse from its protobuf representation.
+func (r *DescribeEnclaveResponse) UnmarshalPB(v *pb.DescribeEnclaveResponse) error {
+	r.Name = v.Name
+	r.CreatedAt = v.CreatedAt.AsTime()
+	r.CreatedBy = Identity(v.CreatedBy)
+	return nil
+}
+
+// DescribeKeyVersionResponse contains information about a secret key version.
+type DescribeKeyVersionResponse struct {
+	// Name is the name of the secret key ring.
+	Name string
+
+	// Version is the verion of this key identifying it within the key ring.
+	Version int
+
+	// Type is the type of the secret key. For example, AES256.
+	Type SecretKeyType
+
+	// CreatedAt is the point in time when this key version has been created.
+	CreatedAt time.Time
+
+	// CreatedBy is the identity that created this key version.
+	CreatedBy Identity
+}
+
+// MarshalPB converts the DescribeKeyVersionResponse into its protobuf representation.
+func (r *DescribeKeyVersionResponse) MarshalPB(v *pb.DescribeKeyVersionResponse) error {
+	v.Name = r.Name
+	v.Version = uint32(r.Version)
+	v.Type = r.Type.String()
+	v.CreatedAt = pb.Time(r.CreatedAt)
+	v.CreatedBy = r.CreatedBy.String()
+	return nil
+}
+
+// UnmarshalPB initializes the DescribeKeyVersionResponse from its protobuf representation.
+func (r *DescribeKeyVersionResponse) UnmarshalPB(v *pb.DescribeKeyVersionResponse) error {
+	t, err := secretKeyTypeFromString(v.Type)
+	if err != nil {
+		return err
+	}
+
+	r.Name = v.Name
+	r.Type = t
+	r.Version = int(v.Version)
+	r.CreatedAt = v.CreatedAt.AsTime()
+	r.CreatedBy = Identity(v.CreatedBy)
 	return nil
 }
 
