@@ -438,7 +438,7 @@ func (c *Client) ListEnclaveNames(ctx context.Context, req *ListRequest) (*ListR
 	}, nil
 }
 
-// CreateKey creates a new key with the name req.Key with req.Enclave.
+// CreateKey creates a new key with the name req.Name within req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyExists
 // if such a key already exists.
@@ -478,7 +478,7 @@ func (c *Client) CreateKey(ctx context.Context, req *CreateKeyRequest) error {
 	return nil
 }
 
-// DescribeKeyVersion returns metadata about the req.Key within
+// DescribeKeyVersion returns metadata about the key req.Name within
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
@@ -491,7 +491,7 @@ func (c *Client) DescribeKeyVersion(ctx context.Context, req *DescribeKeyVersion
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Key)
+	url, err := c.lb.URL(Path, req.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -517,6 +517,48 @@ func (c *Client) DescribeKeyVersion(ctx context.Context, req *DescribeKeyVersion
 		return nil, err
 	}
 	return &data, nil
+}
+
+// DeleteKey deletes the key with the version req.Version from the key ring
+// with the name req.Name within req.Enclave. It deletes the latest key
+// version if no key version is specified.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyNotFound
+// if such key or key version exists.
+func (c *Client) DeleteKey(ctx context.Context, req *DeleteKeyRequest) error {
+	const (
+		Method      = http.MethodDelete
+		Path        = api.PathSecretKeyDelete
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	url, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
 }
 
 // ListKeyNames returns a list of key names. The list starts at the given
@@ -576,7 +618,7 @@ func (c *Client) ListKeyNames(ctx context.Context, req *ListRequest) (*ListRespo
 	}, nil
 }
 
-// Encrypt encrypts the req.Plaintext with the req.Key within
+// Encrypt encrypts the req.Plaintext with the key req.Name within
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
@@ -594,7 +636,7 @@ func (c *Client) Encrypt(ctx context.Context, req *EncryptRequest) (*EncryptResp
 		return nil, err
 	}
 
-	url, err := c.lb.URL(Path, req.Key)
+	url, err := c.lb.URL(Path, req.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -622,7 +664,7 @@ func (c *Client) Encrypt(ctx context.Context, req *EncryptRequest) (*EncryptResp
 	return &data, nil
 }
 
-// Decrypt decrypts the req.Ciphertext with the req.Key within
+// Decrypt decrypts the req.Ciphertext with the key req.Name within
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
@@ -640,7 +682,7 @@ func (c *Client) Decrypt(ctx context.Context, req *DecryptRequest) (*DecryptResp
 		return nil, err
 	}
 
-	url, err := c.lb.URL(Path, req.Key)
+	url, err := c.lb.URL(Path, req.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -700,7 +742,7 @@ func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*Gen
 		return nil, err
 	}
 
-	url, err := c.lb.URL(Path, req.Key)
+	url, err := c.lb.URL(Path, req.Name)
 	if err != nil {
 		return nil, err
 	}

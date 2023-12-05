@@ -120,14 +120,44 @@ func (r *CreateKeyRequest) UnmarshalPB(v *pb.CreateKeyRequest) error {
 	return nil
 }
 
+// DeleteKeyRequest contains options for deleting secret keys.
+type DeleteKeyRequest struct {
+	// Enclave is the KMS enclave containing the master key.
+	Enclave string
+
+	// Name is the name of the key to delete.
+	Name string
+
+	// Version is an optional version referring to the key
+	// version within the key ring to delete. If <= 0, refers
+	// to the latest version.
+	Version int
+}
+
+// MarshalPB converts the DeleteKeyRequest into its protobuf representation.
+func (r *DeleteKeyRequest) MarshalPB(v *pb.DeleteKeyRequest) error {
+	if r.Version <= 0 {
+		v.Version = 0
+	} else {
+		v.Version = uint32(r.Version)
+	}
+	return nil
+}
+
+// UnmarshalPB initializes the DeleteKeyRequest from its protobuf representation.
+func (r *DeleteKeyRequest) UnmarshalPB(v *pb.DeleteKeyRequest) error {
+	r.Version = int(v.Version)
+	return nil
+}
+
 // DescribeKeyVersionRequest contains options for fetching
 // metadata about a key version.
 type DescribeKeyVersionRequest struct {
 	// Enclave is the KMS enclave containing the master key.
 	Enclave string
 
-	// Key is the name of the master key.
-	Key string
+	// Name is the name of the master key.
+	Name string
 }
 
 // EncryptRequest contains a plaintext message that should be encrypted and
@@ -136,8 +166,8 @@ type EncryptRequest struct {
 	// Enclave is the KMS enclave containing the master key.
 	Enclave string
 
-	// Key is the name of the master key.
-	Key string
+	// Name is the name of the master key.
+	Name string
 
 	// Plaintext is the plain message that is encrypted.
 	Plaintext []byte
@@ -170,8 +200,8 @@ type GenerateKeyRequest struct {
 	// Enclave is the KMS enclave containing the master key.
 	Enclave string
 
-	// Key is the name of the master key.
-	Key string
+	// Name is the name of the master key.
+	Name string
 
 	// AssociatedData is additional data that is not encrypted but crypto. bound
 	// to the ciphertext of the data encryption key. The same associated data must
@@ -208,9 +238,11 @@ func (r *GenerateKeyRequest) UnmarshalPB(v *pb.GenerateKeyRequest) error {
 
 // DecryptRequest contains a ciphertext message that should be decrypted.
 type DecryptRequest struct {
+	// Enclave is the KMS enclave containing the master key.
 	Enclave string
 
-	Key string
+	// Name is the name of the master key.
+	Name string
 
 	// Version identifies the key version within the key ring that should be
 	// used to decrypt the ciphertext.

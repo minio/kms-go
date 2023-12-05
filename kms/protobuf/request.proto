@@ -19,10 +19,16 @@ message CreateKeyRequest {
   optional string Type = 1 [ json_name = "type" ];
 }
 
+message DeleteKeyRequest {
+  // Version identifies the key version within the key ring used to delete.
+  // If zero, the latest key version is used.
+  uint32 Version = 1 [ json_name = "version" ];
+}
+
 message EncryptRequest {
   // Version identifies the key version within the key ring used to encrypt
-  // the plaintext. If not present, the latest key version is used.
-  optional uint32 Version = 1 [ json_name = "version" ];
+  // the plaintext. If zero, the latest key version is used.
+  uint32 Version = 1 [ json_name = "version" ];
 
   // Plaintext is the plain message that is encrypted.
   bytes Plaintext = 2 [ json_name = "plaintext" ];
@@ -38,8 +44,8 @@ message EncryptRequest {
 
 message GenerateKeyRequest {
   // Version identifies the key version within the key ring used to generate
-  // the data encryption key. If not present, the latest key version is used.
-  optional uint32 Version = 1 [ json_name = "version" ];
+  // the data encryption key. If zero, the latest key version is used.
+  uint32 Version = 1 [ json_name = "version" ];
 
   // AssociatedData is additional data that is not encrypted but crypto. bound
   // to the ciphertext of the data encryption key. The same associated data must
@@ -57,7 +63,7 @@ message GenerateKeyRequest {
 
 message DecryptRequest {
   // Version identifies the key version within the key ring that should be
-  // used to decrypt the ciphertext.
+  // used to decrypt the ciphertext. Must not be zero.
   uint32 Version = 1 [ json_name = "version" ];
 
   // Ciphertext is the encrypted message that gets decrypted.

@@ -198,6 +198,7 @@ func (s *ServerStatusResponse) MarshalPB(v *pb.ServerStatusResponse) error {
 	v.LastHeartbeat = pb.Duration(s.LastHeartbeat)
 	v.HeartbeatInterval = pb.Duration(s.HeartbeatInterval)
 	v.ElectionTimeout = pb.Duration(s.ElectionTimeout)
+	v.UpTime = pb.Duration(s.UpTime)
 	v.OS = s.OS
 	v.Arch = s.CPUArch
 	v.CPUs = uint32(s.CPUs)
@@ -223,6 +224,7 @@ func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
 	s.LastHeartbeat = v.LastHeartbeat.AsDuration()
 	s.HeartbeatInterval = v.HeartbeatInterval.AsDuration()
 	s.ElectionTimeout = v.ElectionTimeout.AsDuration()
+	s.UpTime = v.UpTime.AsDuration()
 	s.OS = v.OS
 	s.CPUArch = v.Arch
 	s.CPUs = uint(v.CPUs)
