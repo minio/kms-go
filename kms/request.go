@@ -88,8 +88,8 @@ type CreateKeyRequest struct {
 	// Name is the name of the key to create.
 	Name string
 
-	// Type of the key that is created. If not set, the server
-	// will pick the key type.
+	// Type of the key that is created. For example, AES256.
+	// If not set, the server will pick a key type.
 	Type SecretKeyType
 }
 
@@ -120,22 +120,83 @@ func (r *CreateKeyRequest) UnmarshalPB(v *pb.CreateKeyRequest) error {
 	return nil
 }
 
+// AddKeyVersionRequest contains options for adding a key
+// version to a secret key.
+//
+// For creating a secret key without adding new versions
+// refer to Client.CreateKey and CreateKeyRequest.
+type AddKeyVersionRequest struct {
+	// Enclave is the KMS enclave containing the master key.
+	Enclave string
+
+	// Name is the name of the key.
+	Name string
+
+	// Type of the key version that is added. For example,
+	// AES256. If not set, the server will pick a key type.
+	// Different key versions may have different key types.
+	Type SecretKeyType
+}
+
+// MarshalPB converts the AddKeyVersionRequest into its protobuf representation.
+func (r *AddKeyVersionRequest) MarshalPB(v *pb.AddKeyVersionRequest) error {
+	if r.Type == 0 {
+		v.Type = nil
+	} else {
+		v.Type = new(string)
+		*v.Type = r.Type.String()
+	}
+	return nil
+}
+
+// UnmarshalPB initializes the AddKeyVersionRequest from its protobuf representation.
+func (r *AddKeyVersionRequest) UnmarshalPB(v *pb.AddKeyVersionRequest) error {
+	if v.Type == nil {
+		r.Type = 0
+		return nil
+	}
+
+	t, err := secretKeyTypeFromString(v.GetType())
+	if err != nil {
+		return err
+	}
+
+	r.Type = t
+	return nil
+}
+
 // DeleteKeyRequest contains options for deleting secret keys.
+//
+// For removing just a single key version from a key refer to
+// Client.RemoveKeyVersion and RemoveKeyVersionRequest.
 type DeleteKeyRequest struct {
 	// Enclave is the KMS enclave containing the master key.
 	Enclave string
 
 	// Name is the name of the key to delete.
 	Name string
+}
 
-	// Version is an optional version referring to the key
-	// version within the key ring to delete. If <= 0, refers
-	// to the latest version.
+// RemoveKeyVersionRequest contains options for removing a secret
+// key version from a key.
+//
+// For deleting all key versions in a single operation refer
+// to Client.DeleteKey and DeleteKeyRequest.
+type RemoveKeyVersionRequest struct {
+	// Enclave is the KMS enclave containing the master key.
+	Enclave string
+
+	// Name is the name of the key.
+	Name string
+
+	// Version is the key version to remove. If <= 0, refers
+	// to latest key version currently present. Once a key
+	// version has been removed it cannot be added again.
 	Version int
 }
 
-// MarshalPB converts the DeleteKeyRequest into its protobuf representation.
-func (r *DeleteKeyRequest) MarshalPB(v *pb.DeleteKeyRequest) error {
+// MarshalPB converts the RemoveKeyVersionRequest into its protobuf representation.
+func (r *RemoveKeyVersionRequest) MarshalPB(v *pb.RemoveKeyVersionRequest) error {
 	if r.Version <= 0 {
 		v.Version = 0
 	} else {
@@ -144,8 +205,8 @@ func (r *DeleteKeyRequest) MarshalPB(v *pb.DeleteKeyRequest) error {
 	return nil
 }
 
-// UnmarshalPB initializes the DeleteKeyRequest from its protobuf representation.
-func (r *DeleteKeyRequest) UnmarshalPB(v *pb.DeleteKeyRequest) error {
+// UnmarshalPB initializes the RemoveKeyVersionRequest from its protobuf representation.
+func (r *RemoveKeyVersionRequest) UnmarshalPB(v *pb.RemoveKeyVersionRequest) error {
 	r.Version = int(v.Version)
 	return nil
 }

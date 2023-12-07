@@ -15,13 +15,19 @@ option go_package = "kms/protobuf";
 
 message CreateKeyRequest {
   // Type is the type of the created key. If not set, the KMS server picks
-  // the key type.
+  // a key type.
   optional string Type = 1 [ json_name = "type" ];
 }
 
-message DeleteKeyRequest {
-  // Version identifies the key version within the key ring used to delete.
-  // If zero, the latest key version is used.
+message AddKeyVersionRequest {
+  // Type is the type of the key version added. If not set, the KMS server
+  // picks a key type.
+  optional string Type = 1 [ json_name = "type" ];
+}
+
+message RemoveKeyVersionRequest {
+  // Version identifies the key version within the key ring to remove.
+  // If zero, the latest key version is removed.
   uint32 Version = 1 [ json_name = "version" ];
 }
 
