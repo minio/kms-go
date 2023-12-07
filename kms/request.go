@@ -61,6 +61,38 @@ type RemoveNodeRequest struct {
 	Host string
 }
 
+// EditClusterRequest contains updates to the cluster definition
+// and allows clients to edit the cluster definition directly without
+// requiring write quorum.
+type EditClusterRequest struct {
+	// Host is the KMS server where the cluster definition should be
+	// modified. If empty, a Client will use its first host.
+	Host string
+
+	// Remove is a list of KMS server node IDs that are removed
+	// from the cluster definition of the KMS server that receives
+	// the request.
+	Remove []int
+}
+
+// MarshalPB converts the EditClusterRequest into its protobuf representation.
+func (r *EditClusterRequest) MarshalPB(v *pb.EditClusterRequest) error {
+	v.RemoveIDs = make([]uint32, 0, len(r.Remove))
+	for _, id := range r.Remove {
+		v.RemoveIDs = append(v.RemoveIDs, uint32(id))
+	}
+	return nil
+}
+
+// UnmarshalPB initializes the EditClusterRequest from its protobuf representation.
+func (r *EditClusterRequest) UnmarshalPB(v *pb.EditClusterRequest) error {
+	r.Remove = make([]int, 0, len(v.RemoveIDs))
+	for _, id := range v.RemoveIDs {
+		r.Remove = append(r.Remove, int(id))
+	}
+	return nil
+}
+
 // CreateEnclaveRequest contains options for creating enclaves.
 type CreateEnclaveRequest struct {
 	// Name is the name of the enclave to create.

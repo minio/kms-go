@@ -13,6 +13,13 @@ package minio.kms;
 
 option go_package = "kms/protobuf";
 
+message EditClusterRequest {
+  // RemoveIDs is a list of KMS server IDs that are removed from
+  // the cluster definition of the KMS server that receives the
+  // request.
+  repeated uint32 RemoveIDs = 1 [ json_name = "remove" ];
+}
+
 message CreateKeyRequest {
   // Type is the type of the created key. If not set, the KMS server picks
   // a key type.

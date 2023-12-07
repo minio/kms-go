@@ -159,7 +159,7 @@ func (c *Client) ServerStatus(ctx context.Context, endpoint string, _ *NodeStatu
 }
 
 // ClusterStatus returns status information about the entire KMS cluster.
-// The returned CLusterStatusResponse contains status information for all
+// The returned ClusterStatusResponse contains status information for all
 // nodes within the cluster.
 func (c *Client) ClusterStatus(ctx context.Context, _ *StatusRequest) (*ClusterStatusResponse, error) {
 	const (
@@ -194,6 +194,58 @@ func (c *Client) ClusterStatus(ctx context.Context, _ *StatusRequest) (*ClusterS
 		return nil, err
 	}
 	return &data, nil
+}
+
+// EditCluster edits the cluster definition of the KMS server req.Host.
+// If req.Host is empty, the first host of the client's host list is used.
+//
+// Usually, editing the cluster definition directly is only ever necessary
+// when repairing a cluster that has lost some nodes permanently. Hence,
+// applications should only edit the cluster definition of one particular
+// KMS server node and only when some cluster nodes are permanently
+// unavailable.
+//
+// The client does not retry the request in case of a network error.
+// Applications should make sure that the server node is available
+// before editing its cluster definition. Refer to ServerStatus or
+// ClusterStatus.
+func (c *Client) EditCluster(ctx context.Context, req *EditClusterRequest) error {
+	const (
+		Method      = http.MethodPatch
+		Path        = api.PathClusterEdit
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	host := req.Host
+	if host == "" {
+		host = c.lb.Hosts[0]
+	}
+	url, err := url.JoinPath(httpsURL(host), Path)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
 }
 
 // AddNode adds the KMS server at req.Host to the current KMS cluster.
