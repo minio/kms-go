@@ -433,3 +433,31 @@ func (r *GenerateKeyResponse) UnmarshalPB(v *pb.GenerateKeyResponse) error {
 	r.Ciphertext = v.Ciphertext
 	return nil
 }
+
+// DescribePolicyResponse contains information about a policy.
+type DescribePolicyResponse struct {
+	// Name is the name of the policy.
+	Name string
+
+	// CreatedAt is the point in time when the policy has been created.
+	CreatedAt time.Time
+
+	// CreatedBy is the identity that created the policy.
+	CreatedBy Identity
+}
+
+// MarshalPB converts the DescribePolicyResponse into its protobuf representation.
+func (r *DescribePolicyResponse) MarshalPB(v *pb.DescribePolicyResponse) error {
+	v.Name = r.Name
+	v.CreatedAt = pb.Time(r.CreatedAt)
+	v.CreatedBy = r.CreatedBy.String()
+	return nil
+}
+
+// UnmarshalPB initializes the DescribePolicyResponse from its protobuf representation.
+func (r *DescribePolicyResponse) UnmarshalPB(v *pb.DescribePolicyResponse) error {
+	r.Name = v.Name
+	r.CreatedAt = v.CreatedAt.AsTime()
+	r.CreatedBy = Identity(v.CreatedBy)
+	return nil
+}

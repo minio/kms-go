@@ -22,6 +22,11 @@ const (
 	PathSecretKeyEncrypt  = "/v1/key/encrypt/"
 	PathSecretKeyDecrypt  = "/v1/key/decrypt/"
 
+	PathPolicyCreate   = "/v1/policy/create/"
+	PathPolicyDescribe = "/v1/policy/describe/"
+	PathPolicyDelete   = "/v1/policy/delete/"
+	PathPolicyList     = "/v1/policy/list/"
+
 	PathClusterStatus  = "/v1/cluster/status"
 	PathClusterAdd     = "/v1/cluster/add/"
 	PathClusterRemove  = "/v1/cluster/remove/"

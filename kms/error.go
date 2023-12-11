@@ -19,6 +19,12 @@ import (
 
 // MinIO KMS API errors.
 var (
+	// ErrPermission is returned when the client has insufficient permissions
+	// for performing the tried operation. For example, policy associated to the
+	// client's identity may not allow or even deny the request or the client
+	// may try to perform an admin operation without admin permissions.
+	ErrPermission = Error{http.StatusForbidden, "access denied: insufficient permissions"}
+
 	// ErrEnclaveExists is returned when trying to create an enclave
 	// that already exists.
 	ErrEnclaveExists = Error{http.StatusConflict, "enclave already exists"}
@@ -35,6 +41,10 @@ var (
 	// ErrKeyNotFound is returned when trying to use a key that
 	// that does not exist.
 	ErrKeyNotFound = Error{http.StatusNotFound, "key does not exist"}
+
+	// ErrPolicyNotFound is returned when trying to fetch or delete a policy
+	// that does not exist.
+	ErrPolicyNotFound = Error{http.StatusNotFound, "policy does not exist"}
 )
 
 // Error is a KMS API error.

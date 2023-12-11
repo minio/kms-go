@@ -18,6 +18,7 @@ type Iter[T any] struct {
 	NextFn func(context.Context, *ListRequest) (*ListResponse[T], error)
 
 	items      []T
+	enclave    string
 	prefix     string
 	continueAt string
 	limit      int
@@ -31,6 +32,7 @@ func (i *Iter[T]) SeekTo(ctx context.Context, req *ListRequest) (item T, err err
 		return item, i.err
 	}
 
+	i.enclave = req.Enclave
 	i.prefix = req.Prefix
 	i.continueAt = req.ContinueAt
 	i.limit = req.Limit
@@ -49,6 +51,7 @@ func (i *Iter[T]) Next(ctx context.Context) (item T, err error) {
 		}
 
 		resp, err := i.NextFn(ctx, &ListRequest{
+			Enclave:    i.enclave,
 			Prefix:     i.prefix,
 			ContinueAt: i.continueAt,
 			Limit:      i.limit,

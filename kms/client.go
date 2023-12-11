@@ -362,8 +362,7 @@ func (c *Client) CreateEnclave(ctx context.Context, req *CreateEnclaveRequest) e
 // DescribeEnclave returns metadata about the enclave with the
 // the name req.Name.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrKeyNotFound if no such key exists.
+// It returns ErrEnclaveNotFound if no such enclave exists.
 func (c *Client) DescribeEnclave(ctx context.Context, req *DescribeEnclaveRequest) (*DescribeEnclaveResponse, error) {
 	const (
 		Method      = http.MethodGet
@@ -730,6 +729,7 @@ func (c *Client) ListKeyNames(ctx context.Context, req *ListRequest) (*ListRespo
 		return nil, err
 	}
 	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
@@ -901,6 +901,181 @@ func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*Gen
 		return nil, err
 	}
 	return &data, nil
+}
+
+// CreatePolicy creates a new or overwrites an exisiting policy with the
+// name req.Name within req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists.
+func (c *Client) CreatePolicy(ctx context.Context, req *CreatePolicyRequest) error {
+	const (
+		Method      = http.MethodPut
+		Path        = api.PathPolicyCreate
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	url, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
+}
+
+// DescribePolicy returns metadata about the policy req.Name within
+// the req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and
+// ErrPolicyNotFound if no such policy exists.
+func (c *Client) DescribePolicy(ctx context.Context, req *DescribePolicyRequest) (*DescribePolicyResponse, error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathPolicyDescribe
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return nil, err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data DescribePolicyResponse
+	if err := readResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// DeletePolicy deletes the policy with the name req.Name within req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and ErrPolicyNotFound
+// if such policy exists.
+func (c *Client) DeletePolicy(ctx context.Context, req *DeletePolicyRequest) error {
+	const (
+		Method      = http.MethodDelete
+		Path        = api.PathPolicyDelete
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
+}
+
+// ListPolicyNames returns a list of policy names within the req.Enclave.
+// The list starts at the given req.Prefix and req.ContinueAt and contains
+// at most req.Limit names.
+//
+// ListEnclaveNames implements paginated listing. For iterating over a stream
+// of policy names combine it with an Iter.
+func (c *Client) ListPolicyNames(ctx context.Context, req *ListRequest) (*ListResponse[string], error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathPolicyList
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+
+		QueryContinue = api.QueryListContinue
+		QueryLimit    = api.QueryListLimit
+	)
+
+	query := url.Values{}
+	if req.ContinueAt != "" {
+		query[QueryContinue] = []string{req.ContinueAt}
+	}
+	if req.Limit > 0 {
+		query[QueryLimit] = []string{strconv.Itoa(req.Limit)}
+	}
+
+	url, err := c.lb.URL(Path, req.Prefix)
+	if err != nil {
+		return nil, err
+	}
+	if len(query) > 0 {
+		url += "?" + query.Encode()
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data pb.ListPolicyNamesResponse
+	if err = readProtoResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &ListResponse[string]{
+		Items:      data.Names,
+		ContinueAt: data.ContinueAt,
+	}, nil
 }
 
 // httpsURL turns the endpoint into an HTTPS endpoint.

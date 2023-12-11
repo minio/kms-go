@@ -86,3 +86,8 @@ message DecryptRequest {
   // ciphertext.
   bytes AssociatedData = 3 [ json_name = "associated_data" ];
 }
+
+message CreatePolicyRequest {
+   map<string, string> Allow = 1 [ json_name = "allow" ];
+   map<string, string> Deny = 2 [ json_name = "deny" ];
+}

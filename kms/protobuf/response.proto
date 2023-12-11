@@ -212,3 +212,20 @@ message GenerateKeyResponse {
   bytes Ciphertext = 3 [ json_name = "ciphertext" ];
 }
 
+message DescribePolicyResponse {
+  // Name is the name of the policy.
+  string Name = 1 [ json_name = "name" ];
+
+  // CreatedAt is the point in time when this policy got created.
+  google.protobuf.Timestamp CreatedAt = 4 [ json_name="created_at" ];
+
+  // CreatedBy is the identity that created the policy.
+  string CreatedBy = 5 [ json_name="created_by" ];
+}
+
+message ListPolicyNamesResponse {
+  // Names is the list of policy names.
+  repeated string Names = 1 [ json_name = "names" ];
+
+  string ContinueAt = 2 [ json_name = "continue_at" ];
+}

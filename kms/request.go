@@ -11,6 +11,11 @@ import (
 // ListRequest contains generic options for listing elements,
 // like enclaves or keys.
 type ListRequest struct {
+	// Enclave is the enclave in which to list elements. For
+	// example keys or policies. It is ignored when listing
+	// enclaves.
+	Enclave string
+
 	// Prefix is an optional prefix to start the listing from.
 	// For example, an application may want to list all keys
 	// starting with "foo", like "foo-1" and "foobar".
@@ -363,4 +368,66 @@ func (r *DecryptRequest) UnmarshalPB(v *pb.DecryptRequest) error {
 	r.Ciphertext = v.Ciphertext
 	r.AssociateData = v.AssociatedData
 	return nil
+}
+
+// CreatePolicyRequest contains options for creating policies.
+type CreatePolicyRequest struct {
+	// Enclave is the KMS enclave in which the policy is created.
+	Enclave string
+
+	// Name is the name of the policy that is created.
+	Name string
+
+	// Allow is a set of allow rules.
+	Allow map[string]Rule
+
+	// Deny is a set of deny rules.
+	Deny map[string]Rule
+}
+
+// MarshalPB converts the CreatePolicyRequest into its protobuf representation.
+func (r *CreatePolicyRequest) MarshalPB(v *pb.CreatePolicyRequest) error {
+	v.Allow = make(map[string]string, len(r.Allow))
+	for path, rule := range r.Allow {
+		v.Allow[path] = rule.String()
+	}
+
+	v.Deny = make(map[string]string, len(r.Deny))
+	for path, rule := range r.Deny {
+		v.Deny[path] = rule.String()
+	}
+	return nil
+}
+
+// UnmarshalPB initializes the CreatePolicyRequest from its protobuf representation.
+func (r *CreatePolicyRequest) UnmarshalPB(v *pb.CreatePolicyRequest) error {
+	r.Allow = make(map[string]Rule, len(v.Allow))
+	for path := range v.Allow {
+		r.Allow[path] = Rule{}
+	}
+
+	r.Allow = make(map[string]Rule, len(v.Deny))
+	for path := range v.Deny {
+		r.Deny[path] = Rule{}
+	}
+	return nil
+}
+
+// DescribePolicyRequest contains options for fetching metadata
+// about a policy.
+type DescribePolicyRequest struct {
+	// Enclave is the KMS enclave containing the policy.
+	Enclave string
+
+	// Name is the name of the policy.
+	Name string
+}
+
+// DeletePolicyRequest contains options for deleting a policies.
+type DeletePolicyRequest struct {
+	// Enclave is the KMS enclave containing the policy.
+	Enclave string
+
+	// Name is the name of the policy that is deleted.
+	Name string
 }
