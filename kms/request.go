@@ -406,16 +406,16 @@ func (r *CreatePolicyRequest) UnmarshalPB(v *pb.CreatePolicyRequest) error {
 		r.Allow[path] = Rule{}
 	}
 
-	r.Allow = make(map[string]Rule, len(v.Deny))
+	r.Deny = make(map[string]Rule, len(v.Deny))
 	for path := range v.Deny {
 		r.Deny[path] = Rule{}
 	}
 	return nil
 }
 
-// DescribePolicyRequest contains options for fetching metadata
-// about a policy.
-type DescribePolicyRequest struct {
+// PolicyRequest contains options for fetching a policy and
+// policy metadata.
+type PolicyRequest struct {
 	// Enclave is the KMS enclave containing the policy.
 	Enclave string
 

@@ -24,6 +24,7 @@ const (
 
 	PathPolicyCreate   = "/v1/policy/create/"
 	PathPolicyDescribe = "/v1/policy/describe/"
+	PathPolicyRead     = "/v1/policy/read/"
 	PathPolicyDelete   = "/v1/policy/delete/"
 	PathPolicyList     = "/v1/policy/list/"
 

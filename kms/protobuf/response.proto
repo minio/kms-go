@@ -223,6 +223,27 @@ message DescribePolicyResponse {
   string CreatedBy = 5 [ json_name="created_by" ];
 }
 
+message PolicyResponse {
+  // Name is the name of the policy.
+  string Name = 1 [ json_name = "name" ];
+
+  // Allow contains a set of API path patterns and corresponding policy rules.
+  // Requests that match at least one path, but not any deny pattern, and
+  // pass the corresponding policy rule are accepted by the server.
+  map<string,string> Allow = 2 [ json_name = "allow" ];
+
+  // Deny contains a set of API path patterns and corresponding policy rules.
+  // Requests that match at least one path and pass the corresponding policy
+  // rule are rejected by the server.
+  map<string,string> Deny = 3 [ json_name = "deny" ];
+
+  // CreatedAt is the point in time when this policy got created.
+  google.protobuf.Timestamp CreatedAt = 4 [ json_name="created_at" ];
+
+  // CreatedBy is the identity that created the policy.
+  string CreatedBy = 5 [ json_name="created_by" ];
+}
+
 message ListPolicyNamesResponse {
   // Names is the list of policy names.
   repeated string Names = 1 [ json_name = "names" ];

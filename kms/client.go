@@ -948,7 +948,7 @@ func (c *Client) CreatePolicy(ctx context.Context, req *CreatePolicyRequest) err
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
 // ErrPolicyNotFound if no such policy exists.
-func (c *Client) DescribePolicy(ctx context.Context, req *DescribePolicyRequest) (*DescribePolicyResponse, error) {
+func (c *Client) DescribePolicy(ctx context.Context, req *PolicyRequest) (*DescribePolicyResponse, error) {
 	const (
 		Method      = http.MethodGet
 		Path        = api.PathPolicyDescribe
@@ -978,6 +978,46 @@ func (c *Client) DescribePolicy(ctx context.Context, req *DescribePolicyRequest)
 	}
 
 	var data DescribePolicyResponse
+	if err := readResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// GetPolicy fetches the policy req.Name within the req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and
+// ErrPolicyNotFound if no such policy exists.
+func (c *Client) GetPolicy(ctx context.Context, req *PolicyRequest) (*PolicyResponse, error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathPolicyRead
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return nil, err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data PolicyResponse
 	if err := readResponse(resp, &data); err != nil {
 		return nil, err
 	}

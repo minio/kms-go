@@ -5,6 +5,7 @@
 package kms
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -457,6 +458,68 @@ func (r *DescribePolicyResponse) MarshalPB(v *pb.DescribePolicyResponse) error {
 // UnmarshalPB initializes the DescribePolicyResponse from its protobuf representation.
 func (r *DescribePolicyResponse) UnmarshalPB(v *pb.DescribePolicyResponse) error {
 	r.Name = v.Name
+	r.CreatedAt = v.CreatedAt.AsTime()
+	r.CreatedBy = Identity(v.CreatedBy)
+	return nil
+}
+
+// PolicyResponse contains information about a policy and the policy definition.
+type PolicyResponse struct {
+	// Name is the name of the policy.
+	Name string
+
+	// Allow is the set of allow rules.
+	Allow map[string]Rule
+
+	// Deny is the set of deny rules.
+	Deny map[string]Rule
+
+	// CreatedAt is the point in time when the policy has been created.
+	CreatedAt time.Time
+
+	// CreatedBy is the identity that created the policy.
+	CreatedBy Identity
+}
+
+// MarshalPB converts the PolicyResponse into its protobuf representation.
+func (r *PolicyResponse) MarshalPB(v *pb.PolicyResponse) error {
+	v.Name = r.Name
+
+	v.Allow = make(map[string]string, len(r.Allow))
+	for path, rule := range r.Allow {
+		v.Allow[path] = rule.String()
+	}
+
+	v.Deny = make(map[string]string, len(r.Deny))
+	for path, rule := range r.Deny {
+		v.Deny[path] = rule.String()
+	}
+
+	v.CreatedAt = pb.Time(r.CreatedAt)
+	v.CreatedBy = r.CreatedBy.String()
+	return nil
+}
+
+// UnmarshalPB initializes the PolicyResponse from its protobuf representation.
+func (r *PolicyResponse) UnmarshalPB(v *pb.PolicyResponse) error {
+	r.Name = v.Name
+
+	r.Allow = make(map[string]Rule, len(v.Allow))
+	for path, rule := range v.Allow {
+		if rule != "" {
+			return fmt.Errorf("kms: invalid allow rule '%s' for API '%s'", rule, path)
+		}
+		r.Allow[path] = Rule{}
+	}
+
+	r.Deny = make(map[string]Rule, len(v.Deny))
+	for path, rule := range v.Deny {
+		if rule != "" {
+			return fmt.Errorf("kms: invalid deny rule '%s' for API '%s'", rule, path)
+		}
+		r.Deny[path] = Rule{}
+	}
+
 	r.CreatedAt = v.CreatedAt.AsTime()
 	r.CreatedBy = Identity(v.CreatedBy)
 	return nil

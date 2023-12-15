@@ -1057,6 +1057,94 @@ func (x *DescribePolicyResponse) GetCreatedBy() string {
 	return ""
 }
 
+type PolicyResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Name is the name of the policy.
+	Name string `protobuf:"bytes,1,opt,name=Name,json=name,proto3" json:"Name,omitempty"`
+	// Allow contains a set of API path patterns and corresponding policy rules.
+	// Requests that match at least one path, but not any deny pattern, and
+	// pass the corresponding policy rule are accepted by the server.
+	Allow map[string]string `protobuf:"bytes,2,rep,name=Allow,json=allow,proto3" json:"Allow,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	// Deny contains a set of API path patterns and corresponding policy rules.
+	// Requests that match at least one path and pass the corresponding policy
+	// rule are rejected by the server.
+	Deny map[string]string `protobuf:"bytes,3,rep,name=Deny,json=deny,proto3" json:"Deny,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	// CreatedAt is the point in time when this policy got created.
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=CreatedAt,json=created_at,proto3" json:"CreatedAt,omitempty"`
+	// CreatedBy is the identity that created the policy.
+	CreatedBy string `protobuf:"bytes,5,opt,name=CreatedBy,json=created_by,proto3" json:"CreatedBy,omitempty"`
+}
+
+func (x *PolicyResponse) Reset() {
+	*x = PolicyResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_response_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *PolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyResponse) ProtoMessage() {}
+
+func (x *PolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_response_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyResponse.ProtoReflect.Descriptor instead.
+func (*PolicyResponse) Descriptor() ([]byte, []int) {
+	return file_response_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PolicyResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PolicyResponse) GetAllow() map[string]string {
+	if x != nil {
+		return x.Allow
+	}
+	return nil
+}
+
+func (x *PolicyResponse) GetDeny() map[string]string {
+	if x != nil {
+		return x.Deny
+	}
+	return nil
+}
+
+func (x *PolicyResponse) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *PolicyResponse) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
 type ListPolicyNamesResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1070,7 +1158,7 @@ type ListPolicyNamesResponse struct {
 func (x *ListPolicyNamesResponse) Reset() {
 	*x = ListPolicyNamesResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_response_proto_msgTypes[14]
+		mi := &file_response_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1083,7 +1171,7 @@ func (x *ListPolicyNamesResponse) String() string {
 func (*ListPolicyNamesResponse) ProtoMessage() {}
 
 func (x *ListPolicyNamesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_response_proto_msgTypes[14]
+	mi := &file_response_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1096,7 +1184,7 @@ func (x *ListPolicyNamesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPolicyNamesResponse.ProtoReflect.Descriptor instead.
 func (*ListPolicyNamesResponse) Descriptor() ([]byte, []int) {
-	return file_response_proto_rawDescGZIP(), []int{14}
+	return file_response_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListPolicyNamesResponse) GetNames() []string {
@@ -1268,13 +1356,36 @@ var file_response_proto_rawDesc = []byte{
 	0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0a, 0x63, 0x72, 0x65,
 	0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x12, 0x1d, 0x0a, 0x09, 0x43, 0x72, 0x65, 0x61, 0x74,
 	0x65, 0x64, 0x42, 0x79, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x63, 0x72, 0x65, 0x61,
-	0x74, 0x65, 0x64, 0x5f, 0x62, 0x79, 0x22, 0x50, 0x0a, 0x17, 0x4c, 0x69, 0x73, 0x74, 0x50, 0x6f,
-	0x6c, 0x69, 0x63, 0x79, 0x4e, 0x61, 0x6d, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x14, 0x0a, 0x05, 0x4e, 0x61, 0x6d, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09,
-	0x52, 0x05, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x12, 0x1f, 0x0a, 0x0a, 0x43, 0x6f, 0x6e, 0x74, 0x69,
-	0x6e, 0x75, 0x65, 0x41, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x63, 0x6f, 0x6e,
-	0x74, 0x69, 0x6e, 0x75, 0x65, 0x5f, 0x61, 0x74, 0x42, 0x0e, 0x5a, 0x0c, 0x6b, 0x6d, 0x73, 0x2f,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x74, 0x65, 0x64, 0x5f, 0x62, 0x79, 0x22, 0xe6, 0x02, 0x0a, 0x0e, 0x50, 0x6f, 0x6c, 0x69, 0x63,
+	0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x4e, 0x61, 0x6d,
+	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x3a, 0x0a,
+	0x05, 0x41, 0x6c, 0x6c, 0x6f, 0x77, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x24, 0x2e, 0x6d,
+	0x69, 0x6e, 0x69, 0x6f, 0x2e, 0x6b, 0x6d, 0x73, 0x2e, 0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x41, 0x6c, 0x6c, 0x6f, 0x77, 0x45, 0x6e, 0x74,
+	0x72, 0x79, 0x52, 0x05, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x12, 0x37, 0x0a, 0x04, 0x44, 0x65, 0x6e,
+	0x79, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x6d, 0x69, 0x6e, 0x69, 0x6f, 0x2e,
+	0x6b, 0x6d, 0x73, 0x2e, 0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x2e, 0x44, 0x65, 0x6e, 0x79, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x04, 0x64, 0x65,
+	0x6e, 0x79, 0x12, 0x39, 0x0a, 0x09, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d,
+	0x70, 0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x12, 0x1d, 0x0a,
+	0x09, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x42, 0x79, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x62, 0x79, 0x1a, 0x38, 0x0a, 0x0a,
+	0x41, 0x6c, 0x6c, 0x6f, 0x77, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65,
+	0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05,
+	0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c,
+	0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x1a, 0x37, 0x0a, 0x09, 0x44, 0x65, 0x6e, 0x79, 0x45, 0x6e,
+	0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22,
+	0x50, 0x0a, 0x17, 0x4c, 0x69, 0x73, 0x74, 0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x4e, 0x61, 0x6d,
+	0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x4e, 0x61,
+	0x6d, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09, 0x52, 0x05, 0x6e, 0x61, 0x6d, 0x65, 0x73,
+	0x12, 0x1f, 0x0a, 0x0a, 0x43, 0x6f, 0x6e, 0x74, 0x69, 0x6e, 0x75, 0x65, 0x41, 0x74, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x63, 0x6f, 0x6e, 0x74, 0x69, 0x6e, 0x75, 0x65, 0x5f, 0x61,
+	0x74, 0x42, 0x0e, 0x5a, 0x0c, 0x6b, 0x6d, 0x73, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75,
+	0x66, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1289,7 +1400,7 @@ func file_response_proto_rawDescGZIP() []byte {
 	return file_response_proto_rawDescData
 }
 
-var file_response_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_response_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_response_proto_goTypes = []interface{}{
 	(*ErrResponse)(nil),                // 0: minio.kms.ErrResponse
 	(*VersionResponse)(nil),            // 1: minio.kms.VersionResponse
@@ -1305,32 +1416,38 @@ var file_response_proto_goTypes = []interface{}{
 	(*DecryptResponse)(nil),            // 11: minio.kms.DecryptResponse
 	(*GenerateKeyResponse)(nil),        // 12: minio.kms.GenerateKeyResponse
 	(*DescribePolicyResponse)(nil),     // 13: minio.kms.DescribePolicyResponse
-	(*ListPolicyNamesResponse)(nil),    // 14: minio.kms.ListPolicyNamesResponse
-	nil,                                // 15: minio.kms.ServerStatusResponse.NodesEntry
-	nil,                                // 16: minio.kms.ClusterStatusResponse.NodesUpEntry
-	nil,                                // 17: minio.kms.ClusterStatusResponse.NodesDownEntry
-	(*durationpb.Duration)(nil),        // 18: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),      // 19: google.protobuf.Timestamp
+	(*PolicyResponse)(nil),             // 14: minio.kms.PolicyResponse
+	(*ListPolicyNamesResponse)(nil),    // 15: minio.kms.ListPolicyNamesResponse
+	nil,                                // 16: minio.kms.ServerStatusResponse.NodesEntry
+	nil,                                // 17: minio.kms.ClusterStatusResponse.NodesUpEntry
+	nil,                                // 18: minio.kms.ClusterStatusResponse.NodesDownEntry
+	nil,                                // 19: minio.kms.PolicyResponse.AllowEntry
+	nil,                                // 20: minio.kms.PolicyResponse.DenyEntry
+	(*durationpb.Duration)(nil),        // 21: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),      // 22: google.protobuf.Timestamp
 }
 var file_response_proto_depIdxs = []int32{
-	15, // 0: minio.kms.ServerStatusResponse.Nodes:type_name -> minio.kms.ServerStatusResponse.NodesEntry
-	18, // 1: minio.kms.ServerStatusResponse.LastHeartbeat:type_name -> google.protobuf.Duration
-	18, // 2: minio.kms.ServerStatusResponse.HeartbeatInterval:type_name -> google.protobuf.Duration
-	18, // 3: minio.kms.ServerStatusResponse.ElectionTimeout:type_name -> google.protobuf.Duration
-	18, // 4: minio.kms.ServerStatusResponse.UpTime:type_name -> google.protobuf.Duration
-	16, // 5: minio.kms.ClusterStatusResponse.nodesUp:type_name -> minio.kms.ClusterStatusResponse.NodesUpEntry
-	17, // 6: minio.kms.ClusterStatusResponse.nodesDown:type_name -> minio.kms.ClusterStatusResponse.NodesDownEntry
-	19, // 7: minio.kms.DescribeEnclaveResponse.CreatedAt:type_name -> google.protobuf.Timestamp
-	18, // 8: minio.kms.DescribeRouteResponse.Timeout:type_name -> google.protobuf.Duration
+	16, // 0: minio.kms.ServerStatusResponse.Nodes:type_name -> minio.kms.ServerStatusResponse.NodesEntry
+	21, // 1: minio.kms.ServerStatusResponse.LastHeartbeat:type_name -> google.protobuf.Duration
+	21, // 2: minio.kms.ServerStatusResponse.HeartbeatInterval:type_name -> google.protobuf.Duration
+	21, // 3: minio.kms.ServerStatusResponse.ElectionTimeout:type_name -> google.protobuf.Duration
+	21, // 4: minio.kms.ServerStatusResponse.UpTime:type_name -> google.protobuf.Duration
+	17, // 5: minio.kms.ClusterStatusResponse.nodesUp:type_name -> minio.kms.ClusterStatusResponse.NodesUpEntry
+	18, // 6: minio.kms.ClusterStatusResponse.nodesDown:type_name -> minio.kms.ClusterStatusResponse.NodesDownEntry
+	22, // 7: minio.kms.DescribeEnclaveResponse.CreatedAt:type_name -> google.protobuf.Timestamp
+	21, // 8: minio.kms.DescribeRouteResponse.Timeout:type_name -> google.protobuf.Duration
 	5,  // 9: minio.kms.ListAPIsResponse.APIs:type_name -> minio.kms.DescribeRouteResponse
-	19, // 10: minio.kms.DescribeKeyVersionResponse.CreatedAt:type_name -> google.protobuf.Timestamp
-	19, // 11: minio.kms.DescribePolicyResponse.CreatedAt:type_name -> google.protobuf.Timestamp
-	2,  // 12: minio.kms.ClusterStatusResponse.NodesUpEntry.value:type_name -> minio.kms.ServerStatusResponse
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	22, // 10: minio.kms.DescribeKeyVersionResponse.CreatedAt:type_name -> google.protobuf.Timestamp
+	22, // 11: minio.kms.DescribePolicyResponse.CreatedAt:type_name -> google.protobuf.Timestamp
+	19, // 12: minio.kms.PolicyResponse.Allow:type_name -> minio.kms.PolicyResponse.AllowEntry
+	20, // 13: minio.kms.PolicyResponse.Deny:type_name -> minio.kms.PolicyResponse.DenyEntry
+	22, // 14: minio.kms.PolicyResponse.CreatedAt:type_name -> google.protobuf.Timestamp
+	2,  // 15: minio.kms.ClusterStatusResponse.NodesUpEntry.value:type_name -> minio.kms.ServerStatusResponse
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_response_proto_init() }
@@ -1508,6 +1625,18 @@ func file_response_proto_init() {
 			}
 		}
 		file_response_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PolicyResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_response_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ListPolicyNamesResponse); i {
 			case 0:
 				return &v.state
@@ -1526,7 +1655,7 @@ func file_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_response_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
