@@ -588,11 +588,16 @@ func (c *Client) DeleteKey(ctx context.Context, req *DeleteKeyRequest) error {
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return err
+	}
+
 	url, err := c.lb.URL(Path, req.Name)
 	if err != nil {
 		return err
 	}
-	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
