@@ -5,6 +5,8 @@
 package kms
 
 import (
+	"errors"
+
 	pb "github.com/minio/kms-go/kms/protobuf"
 )
 
@@ -128,6 +130,14 @@ type CreateKeyRequest struct {
 	// Type of the key that is created. For example, AES256.
 	// If not set, the server will pick a key type.
 	Type SecretKeyType
+
+	// AddVersion indicates whether a new key version is created.
+	// By default, trying to create a key that already exists fails.
+	// If AddVersion is true, a new key version is created.
+	//
+	// Adding versions to an existing key is often referred to as
+	// key rotation.
+	AddVersion bool
 }
 
 // MarshalPB converts the CreateKeyRequest into its protobuf representation.
@@ -138,67 +148,24 @@ func (r *CreateKeyRequest) MarshalPB(v *pb.CreateKeyRequest) error {
 		v.Type = new(string)
 		*v.Type = r.Type.String()
 	}
+
+	v.AddVersion = r.AddVersion
 	return nil
 }
 
 // UnmarshalPB initializes the CreateKeyRequest from its protobuf representation.
 func (r *CreateKeyRequest) UnmarshalPB(v *pb.CreateKeyRequest) error {
-	if v.Type == nil {
-		r.Type = 0
-		return nil
-	}
-
-	t, err := secretKeyTypeFromString(v.GetType())
-	if err != nil {
-		return err
-	}
-
-	r.Type = t
-	return nil
-}
-
-// AddKeyVersionRequest contains options for adding a key
-// version to a secret key.
-//
-// For creating a secret key without adding new versions
-// refer to Client.CreateKey and CreateKeyRequest.
-type AddKeyVersionRequest struct {
-	// Enclave is the KMS enclave containing the master key.
-	Enclave string
-
-	// Name is the name of the key.
-	Name string
-
-	// Type of the key version that is added. For example,
-	// AES256. If not set, the server will pick a key type.
-	// Different key versions may have different key types.
-	Type SecretKeyType
-}
-
-// MarshalPB converts the AddKeyVersionRequest into its protobuf representation.
-func (r *AddKeyVersionRequest) MarshalPB(v *pb.AddKeyVersionRequest) error {
-	if r.Type == 0 {
-		v.Type = nil
-	} else {
-		v.Type = new(string)
-		*v.Type = r.Type.String()
-	}
-	return nil
-}
-
-// UnmarshalPB initializes the AddKeyVersionRequest from its protobuf representation.
-func (r *AddKeyVersionRequest) UnmarshalPB(v *pb.AddKeyVersionRequest) error {
-	if v.Type == nil {
-		r.Type = 0
-		return nil
-	}
-
-	t, err := secretKeyTypeFromString(v.GetType())
-	if err != nil {
-		return err
+	var t SecretKeyType
+	if v.Type != nil {
+		var err error
+		t, err = secretKeyTypeFromString(v.GetType())
+		if err != nil {
+			return err
+		}
 	}
 
 	r.Type = t
+	r.AddVersion = v.AddVersion
 	return nil
 }
 
@@ -212,39 +179,39 @@ type DeleteKeyRequest struct {
 
 	// Name is the name of the key to delete.
 	Name string
-}
-
-// RemoveKeyVersionRequest contains options for removing a secret
-// key version from a key.
-//
-// For deleting all key versions in a single operation refer
-// to Client.DeleteKey and DeleteKeyRequest.
-type RemoveKeyVersionRequest struct {
-	// Enclave is the KMS enclave containing the master key.
-	Enclave string
-
-	// Name is the name of the key.
-	Name string
 
 	// Version is the key version to remove. If <= 0, refers
 	// to latest key version currently present. Once a key
 	// version has been removed it cannot be added again.
 	Version int
+
+	// AllVersions indicates whether all key versions should be removed.
+	// If true, Version must be 0.
+	AllVersions bool
 }
 
-// MarshalPB converts the RemoveKeyVersionRequest into its protobuf representation.
-func (r *RemoveKeyVersionRequest) MarshalPB(v *pb.RemoveKeyVersionRequest) error {
-	if r.Version <= 0 {
+// MarshalPB converts the DeleteKeyRequest into its protobuf representation.
+func (r *DeleteKeyRequest) MarshalPB(v *pb.DeleteKeyRequest) error {
+	switch {
+	case r.AllVersions && r.Version != 0:
+		return errors.New("kms: invalid DeleteKeyRequest: all versions and non-zero version are incompatible")
+	case r.Version < 0:
 		v.Version = 0
-	} else {
+	default:
 		v.Version = uint32(r.Version)
 	}
+	v.AllVersions = r.AllVersions
 	return nil
 }
 
-// UnmarshalPB initializes the RemoveKeyVersionRequest from its protobuf representation.
-func (r *RemoveKeyVersionRequest) UnmarshalPB(v *pb.RemoveKeyVersionRequest) error {
+// UnmarshalPB initializes the DeleteKeyRequest from its protobuf representation.
+func (r *DeleteKeyRequest) UnmarshalPB(v *pb.DeleteKeyRequest) error {
+	if v.AllVersions && v.Version > 0 {
+		return errors.New("kms: invalid DeleteKeyRequest: all versions and non-zero version are incompatible")
+	}
+
 	r.Version = int(v.Version)
+	r.AllVersions = v.AllVersions
 	return nil
 }
 

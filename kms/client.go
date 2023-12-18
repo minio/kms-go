@@ -489,9 +489,10 @@ func (c *Client) ListEnclaveNames(ctx context.Context, req *ListRequest) (*ListR
 	}, nil
 }
 
-// CreateKey creates a new key with the name req.Name within req.Enclave
-// if and only if no such key exists already. For adding key versions to
-// an existing key use AddKeyVersion.
+// CreateKey creates a new key with the name req.Name within req.Enclave.
+// By default, a new key is created if and only if no such key exists. If
+// req.AddVersion is true, a new key version is added to an existing key.
+// The later is often referred to as key rotation.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyExists
 // if such a key already exists.
@@ -499,90 +500,6 @@ func (c *Client) CreateKey(ctx context.Context, req *CreateKeyRequest) error {
 	const (
 		Method      = http.MethodPut
 		Path        = api.PathSecretKeyCreate
-		StatusOK    = http.StatusOK
-		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
-	)
-
-	body, err := pb.Marshal(req)
-	if err != nil {
-		return err
-	}
-
-	url, err := c.lb.URL(Path, req.Name)
-	if err != nil {
-		return err
-	}
-	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	r.Header.Set(headers.Accept, ContentType)
-	r.Header.Set(headers.Enclave, req.Enclave)
-
-	resp, err := c.client.Do(r)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return readError(resp)
-	}
-	return nil
-}
-
-// AddKeyVersion adds a new key version to an existing key with the name req.Name
-// within req.Enclave. If no such key exists, it creates the key. For creating a
-// key without adding a new key versions use CreateKey.
-//
-// It returns ErrEnclaveNotFound if no such enclave exists.
-func (c *Client) AddKeyVersion(ctx context.Context, req *AddKeyVersionRequest) error {
-	const (
-		Method      = http.MethodPatch
-		Path        = api.PathSecretKeyAdd
-		StatusOK    = http.StatusOK
-		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
-	)
-
-	body, err := pb.Marshal(req)
-	if err != nil {
-		return err
-	}
-
-	url, err := c.lb.URL(Path, req.Name)
-	if err != nil {
-		return err
-	}
-	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	r.Header.Set(headers.Accept, ContentType)
-	r.Header.Set(headers.Enclave, req.Enclave)
-
-	resp, err := c.client.Do(r)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return readError(resp)
-	}
-	return nil
-}
-
-// RemoveKeyVersion removes the version req.Version from the key with the name
-// req.Name within req.Enclave. Once a key version has been removed, it cannot
-// be added again. When a key contains just a single key version, RemoveKeyVersion
-// deletes the key.
-//
-// It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyNotFound if
-// no such a key or key version exists.
-func (c *Client) RemoveKeyVersion(ctx context.Context, req *RemoveKeyVersionRequest) error {
-	const (
-		Method      = http.MethodPatch
-		Path        = api.PathSecretKeyRemove
 		StatusOK    = http.StatusOK
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
@@ -658,7 +575,8 @@ func (c *Client) DescribeKeyVersion(ctx context.Context, req *DescribeKeyVersion
 
 // DeleteKey deletes the key with the version req.Version from the key ring
 // with the name req.Name within req.Enclave. It deletes the latest key
-// version if no key version is specified.
+// version if no key version is specified and the entire key and all versions
+// if req.AllVersions is true.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyNotFound
 // if such key or key version exists.

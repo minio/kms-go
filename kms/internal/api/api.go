@@ -13,9 +13,7 @@ const (
 	PathEnclaveList     = "/v1/enclave/list/"
 
 	PathSecretKeyCreate   = "/v1/key/create/"
-	PathSecretKeyAdd      = "/v1/key/add/"
 	PathSecretKeyDescribe = "/v1/key/describe/"
-	PathSecretKeyRemove   = "/v1/key/remove/"
 	PathSecretKeyDelete   = "/v1/key/delete/"
 	PathSecretKeyList     = "/v1/key/list/"
 	PathSecretKeyGenerate = "/v1/key/generate/"

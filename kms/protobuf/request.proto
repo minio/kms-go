@@ -24,18 +24,18 @@ message CreateKeyRequest {
   // Type is the type of the created key. If not set, the KMS server picks
   // a key type.
   optional string Type = 1 [ json_name = "type" ];
+
+  // AddVersion indicates whether a new key version is created.
+  bool AddVersion = 2 [ json_name = "add_version" ];
 }
 
-message AddKeyVersionRequest {
-  // Type is the type of the key version added. If not set, the KMS server
-  // picks a key type.
-  optional string Type = 1 [ json_name = "type" ];
-}
-
-message RemoveKeyVersionRequest {
+message DeleteKeyRequest {
   // Version identifies the key version within the key ring to remove.
   // If zero, the latest key version is removed.
   uint32 Version = 1 [ json_name = "version" ];
+
+  // AllVersions indicates whether all key versions should be removed.
+  bool AllVersions = 2 [ json_name = "all_versions" ];
 }
 
 message EncryptRequest {
