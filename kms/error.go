@@ -45,6 +45,10 @@ var (
 	// ErrPolicyNotFound is returned when trying to fetch or delete a policy
 	// that does not exist.
 	ErrPolicyNotFound = Error{http.StatusNotFound, "policy does not exist"}
+
+	// ErrIdentityNotFound is returned when trying to access or delete a identity
+	// that does not exist.
+	ErrIdentityNotFound = Error{http.StatusNotFound, " does not exist"}
 )
 
 // Error is a KMS API error.

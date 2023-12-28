@@ -390,11 +390,72 @@ type PolicyRequest struct {
 	Name string
 }
 
-// DeletePolicyRequest contains options for deleting a policies.
+// DeletePolicyRequest contains options for deleting a policy.
 type DeletePolicyRequest struct {
 	// Enclave is the KMS enclave containing the policy.
 	Enclave string
 
 	// Name is the name of the policy that is deleted.
 	Name string
+}
+
+// CreateIdentityRequest contains options for creating new identities.
+type CreateIdentityRequest struct {
+	// Enclave is the KMS enclave in which the identity is created.
+	Enclave string
+
+	// Identity is the identity that is created.
+	Identity Identity
+
+	// Privilege is the identity's privilege. If empty, defaults to User.
+	Privilege Privilege
+
+	// IsServiceAccount indicates whether this identity is a service
+	// account.
+	IsServiceAccount bool
+}
+
+// MarshalPB converts the CreateIdentityequest into its protobuf representation.
+func (r *CreateIdentityRequest) MarshalPB(v *pb.CreateIdentityRequest) error {
+	var privilege string
+	if r.Privilege != 0 {
+		privilege = r.Privilege.String()
+	}
+
+	v.Privilege = privilege
+	v.IsServiceAccount = r.IsServiceAccount
+	return nil
+}
+
+// UnmarshalPB initializes the CreateIdentityRequest from its protobuf representation.
+func (r *CreateIdentityRequest) UnmarshalPB(v *pb.CreateIdentityRequest) error {
+	var privilege Privilege
+	if v.Privilege != "" {
+		var err error
+		if privilege, err = ParsePrivilege(v.Privilege); err != nil {
+			return err
+		}
+	}
+
+	r.Privilege = privilege
+	r.IsServiceAccount = v.IsServiceAccount
+	return nil
+}
+
+// IdentityRequest contains options for fetching identity metadata.
+type IdentityRequest struct {
+	// Enclave is the KMS enclave containing the identity.
+	Enclave string
+
+	// Identity is the identity.
+	Identity Identity
+}
+
+// DeleteIdentityRequest contains options for deleting an identity.
+type DeleteIdentityRequest struct {
+	// Enclave is the KMS enclave containing the identity.
+	Enclave string
+
+	// Identity is the identity that is deleted.
+	Identity Identity
 }

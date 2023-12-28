@@ -11,19 +11,28 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"io"
+	"strconv"
+	"strings"
 )
 
 // An Identity uniquely identifies a private/public key pair.
-// It is a hex-encoded string computed from the DER-encoded
-// X.509 certificate public key info.
+// It consists of a prefix for the hash function followed by
+// the base64-encoded hash of the public key.
+//
+// For example:
+//
+//	h1:Rvxa7nj8zkL48CeDkN6LhpX+K7KK6uhIhpBOcTHNhWws
+//
+// This package uses the "h1:" prefix for SHA-256 and computes
+// the hash of X.509 certificates from the certificate's
+// DER-encoded public key info.
 //
 // For example:
 //
 //	shasum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
-//	identity := hex.EncodeToString(shasum[:])
+//	identity := "h1:" + base64.RawStdEncoding.EncodeToString(shasum[:])
 //
 // By verifying the peer's identity, two parties can detect
 // MitM¹ attacks during a protocol handshake, like in TLS.
@@ -40,8 +49,63 @@ type Identity string
 
 func (i Identity) String() string { return string(i) }
 
-// An APIKey represents a public/private key pair.
+// Privilege represents an access control role of identities.
+// An identity with a higher privilege has access to more APIs.
 //
+// As a general security best practice, identities should have
+// the lowest privilege required to perform their tasks.
+type Privilege uint
+
+// Supported privileges.
+const (
+	// SysAdmin is the highest privilege within the KMS, similar to
+	// root on unix systems. An identity with the SysAdmin privilege
+	// has access to all public APIs. Identities with the SysAdmin
+	// privilege should be used for provisioning and to manage the
+	// KMS cluster.
+	SysAdmin Privilege = iota + 1
+
+	// Admin is the privilege that allows identities to perform all
+	// operations within an enclave. In contrast to sysadmins, admins
+	// cannot peform cluster management tasks or manage enclaves.
+	Admin
+
+	// User is the privilege with limited access within an enclave.
+	// Identities with the User privilege can only perform operations
+	// within an enclave and only with an associated policy allowing
+	// the API operation.
+	User
+)
+
+// ParsePrivilege parses s as privilege string representation.
+func ParsePrivilege(s string) (Privilege, error) {
+	switch s {
+	default:
+		return 0, errors.New("kms: invalid privilege '" + s + "'")
+	case "SysAdmin":
+		return SysAdmin, nil
+	case "Admin":
+		return Admin, nil
+	case "User":
+		return User, nil
+	}
+}
+
+// String returns the string representation of the Privilege.
+func (p Privilege) String() string {
+	switch p {
+	case SysAdmin:
+		return "SysAdmin"
+	case Admin:
+		return "Admin"
+	case User:
+		return "User"
+	default:
+		return "!INVALID:" + strconv.Itoa(int(p))
+	}
+}
+
+// An APIKey represents a public/private key pair.
 // An API key can be used to authenticate to a TLS server via
 // mTLS¹ by generating a X.509 certificate from the API key's
 // public key.
@@ -86,20 +150,24 @@ func GenerateAPIKey(random io.Reader) (APIKey, error) {
 
 // ParseAPIKey parses s as formatted API key.
 func ParseAPIKey(s string) (APIKey, error) {
-	const Ed25519 = 0
+	s, found := strings.CutPrefix(s, "k1:")
+	if !found {
+		return nil, errors.New("kms: invalid API key type")
+	}
 
-	b, err := base64.StdEncoding.DecodeString(s)
+	if base64.RawStdEncoding.DecodedLen(len(s)) != ed25519.SeedSize {
+		return nil, errors.New("kms: invalid API key length")
+	}
+
+	b, err := base64.RawStdEncoding.DecodeString(s)
 	if err != nil {
 		return nil, err
 	}
-	if len(b) != 1+ed25519.SeedSize {
-		return nil, errors.New("kes: invalid API key: invalid length")
-	}
-	if b[0] != Ed25519 {
-		return nil, errors.New("kes: invalid API key: unsupported type")
+	if len(b) != ed25519.SeedSize {
+		return nil, errors.New("kms: invalid API key length")
 	}
 
-	key := ed25519.NewKeyFromSeed(b[1:])
+	key := ed25519.NewKeyFromSeed(b)
 	id, err := ed25519Identity(key[ed25519.SeedSize:])
 	if err != nil {
 		return nil, err
@@ -126,11 +194,7 @@ func (ak *apiKey) Private() crypto.PrivateKey {
 func (ak *apiKey) Identity() Identity { return ak.identity }
 
 func (ak *apiKey) String() string {
-	const Ed25519Type = 0
-	k := make([]byte, 0, 1+ed25519.SeedSize)
-	k = append(k, Ed25519Type)
-	k = append(k, ak.key[:ed25519.SeedSize]...)
-	return base64.StdEncoding.EncodeToString(k)
+	return "k1:" + base64.RawStdEncoding.EncodeToString(ak.key[:ed25519.SeedSize])
 }
 
 func ed25519Identity(pubKey []byte) (Identity, error) {
@@ -149,5 +213,5 @@ func ed25519Identity(pubKey []byte) (Identity, error) {
 		return "", err
 	}
 	id := sha256.Sum256(derPublicKey)
-	return Identity(hex.EncodeToString(id[:])), nil
+	return "h1:" + Identity(base64.RawStdEncoding.EncodeToString(id[:])), nil
 }

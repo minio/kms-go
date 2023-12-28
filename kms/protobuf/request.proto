@@ -88,6 +88,15 @@ message DecryptRequest {
 }
 
 message CreatePolicyRequest {
-   map<string, string> Allow = 1 [ json_name = "allow" ];
-   map<string, string> Deny = 2 [ json_name = "deny" ];
+  map<string, string> Allow = 1 [ json_name = "allow" ];
+  map<string, string> Deny = 2 [ json_name = "deny" ];
+}
+
+message CreateIdentityRequest {
+  // Privilege is the privilege the identity has. Either, "SysAdmin", "Admin" or
+  // "User".
+  string Privilege = 1 [ json_name = "privilege" ];
+
+  // IsServiceAccount indicates whether the identity is a service account.
+  bool IsServiceAccount = 2 [ json_name = "service_account" ];
 }

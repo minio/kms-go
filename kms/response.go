@@ -54,15 +54,14 @@ func readProtoResponse(r *http.Response, v proto.Message) error {
 	return protojson.Unmarshal(buf, v)
 }
 
-// ListResponse is a generic listing response. It contains
-// a list of elements of type T and an optional name from
-// where to continue the listing from. See also: ListResult.
-type ListResponse[T any] struct {
-	// Items is the next page of a list operation.
-	Items []T
+// A Page contains the next items of type T from a paginated listing.
+// It's ContinueAt pointer refers to the next page, if any.
+type Page[T any] struct {
+	Items []T // The next items from the listing.
 
-	// ContinueAt is the name of the next element from where
-	// to resume or continue the listing.
+	// ContinueAt refers to the first item on the next
+	// page from where to resume the listing. Empty at
+	// the end of the listing.
 	ContinueAt string
 }
 
@@ -522,5 +521,63 @@ func (r *PolicyResponse) UnmarshalPB(v *pb.PolicyResponse) error {
 
 	r.CreatedAt = v.CreatedAt.AsTime()
 	r.CreatedBy = Identity(v.CreatedBy)
+	return nil
+}
+
+// DescribeIdentityResponse contains information about an identity.
+type DescribeIdentityResponse struct {
+	// Identity is the identity referring to a private/public key pair.
+	Identity Identity
+
+	// Privilege is the identity's privilege.
+	Privilege Privilege
+
+	// Policy is the name of the assigned policy, if any. It is empty
+	// if the identity's privilege is Admin or SysAdmin.
+	Policy string
+
+	// CreatedAt is the point in time when this identity was created.
+	CreatedAt time.Time
+
+	// CreatedBy is the identity that created this identity.
+	CreatedBy Identity
+
+	// IsServiceAccount indicates whether this identity is a service
+	// account. By default, service accounts inherit the permissions
+	// of their parent identity. Service accounts are removed
+	// automatically when their parent identity is deleted.
+	IsServiceAccount bool
+
+	// ServiceAccounts contains all service accounts of this identity.
+	ServiceAccounts []Identity
+}
+
+// MarshalPB converts the DescribeIdentityResponse into its protobuf representation.
+func (r *DescribeIdentityResponse) MarshalPB(v *pb.DescribeIdentityResponse) error {
+	v.Identity = r.Identity.String()
+	v.Privilege = uint32(r.Privilege)
+	v.Policy = r.Policy
+	v.CreatedAt = pb.Time(r.CreatedAt)
+	v.CreatedBy = r.CreatedBy.String()
+	v.IsServiceAccount = r.IsServiceAccount
+	v.ServiceAccounts = make([]string, 0, len(r.ServiceAccounts))
+	for _, a := range r.ServiceAccounts {
+		v.ServiceAccounts = append(v.ServiceAccounts, a.String())
+	}
+	return nil
+}
+
+// UnmarshalPB initializes the DescribeIdentityResponse from its protobuf representation.
+func (r *DescribeIdentityResponse) UnmarshalPB(v *pb.DescribeIdentityResponse) error {
+	r.Identity = Identity(v.Identity)
+	r.Privilege = Privilege(v.Privilege)
+	r.Policy = v.Policy
+	r.CreatedAt = v.CreatedAt.AsTime()
+	r.CreatedBy = Identity(v.CreatedBy)
+	r.IsServiceAccount = v.IsServiceAccount
+	r.ServiceAccounts = make([]Identity, 0, len(v.ServiceAccounts))
+	for _, a := range v.ServiceAccounts {
+		r.ServiceAccounts = append(r.ServiceAccounts, Identity(a))
+	}
 	return nil
 }

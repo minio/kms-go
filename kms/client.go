@@ -431,13 +431,13 @@ func (c *Client) DeleteEnclave(ctx context.Context, req *DeleteEnclaveRequest) e
 	return nil
 }
 
-// ListEnclaveNames returns a list of enclaves names. The list starts at
-// the given req.Prefix and req.ContinueAt and contains at most req.Limit
-// names.
+// ListEnclaves returns the next page of a paginated listing of enclaves.
+// All enclave names start with the req.Prefix and the first enclave name
+// matches req.ContinueAt. The page contains at most req.Limit enclaves.
 //
-// ListEnclaveNames implements paginated listing. For iterating over a stream
-// of enclave names combine it with an Iter.
-func (c *Client) ListEnclaveNames(ctx context.Context, req *ListRequest) (*ListResponse[string], error) {
+// ListEnclaves implements paginated listing. For iterating over a stream
+// of enclaves combine it with an Iter.
+func (c *Client) ListEnclaves(ctx context.Context, req *ListRequest) (*Page[DescribeEnclaveResponse], error) {
 	const (
 		Method      = http.MethodGet
 		Path        = api.PathEnclaveList
@@ -479,14 +479,23 @@ func (c *Client) ListEnclaveNames(ctx context.Context, req *ListRequest) (*ListR
 		return nil, readError(resp)
 	}
 
-	var data pb.ListEnclaveNamesResponse
+	var data pb.ListEnclavesResponse
 	if err = readProtoResponse(resp, &data); err != nil {
 		return nil, err
 	}
-	return &ListResponse[string]{
-		Items:      data.Names,
+
+	ls := &Page[DescribeEnclaveResponse]{
+		Items:      make([]DescribeEnclaveResponse, 0, len(data.Enclaves)),
 		ContinueAt: data.ContinueAt,
-	}, nil
+	}
+	for _, e := range data.Enclaves {
+		var r DescribeEnclaveResponse
+		if err = r.UnmarshalPB(e); err != nil {
+			return nil, err
+		}
+		ls.Items = append(ls.Items, r)
+	}
+	return ls, nil
 }
 
 // CreateKey creates a new key with the name req.Name within req.Enclave.
@@ -616,12 +625,13 @@ func (c *Client) DeleteKey(ctx context.Context, req *DeleteKeyRequest) error {
 	return nil
 }
 
-// ListKeyNames returns a list of key names. The list starts at the given
-// req.Prefix and req.ContinueAt and contains at most req.Limit names.
+// ListKeys returns the next page of a paginated listing of secret keys.
+// All key names start with the req.Prefix and the first key name matches
+// req.ContinueAt. The page contains at most req.Limit keys.
 //
-// ListKeyNames implements paginated listing. For iterating over a stream
-// of key names combine it with an Iter.
-func (c *Client) ListKeyNames(ctx context.Context, req *ListRequest) (*ListResponse[string], error) {
+// ListKeys implements paginated listing. For iterating over a stream
+// of keys combine it with an Iter.
+func (c *Client) ListKeys(ctx context.Context, req *ListRequest) (*Page[DescribeKeyVersionResponse], error) {
 	const (
 		Method      = http.MethodGet
 		Path        = api.PathSecretKeyList
@@ -664,14 +674,23 @@ func (c *Client) ListKeyNames(ctx context.Context, req *ListRequest) (*ListRespo
 		return nil, readError(resp)
 	}
 
-	var data pb.ListKeyNamesResponse
+	var data pb.ListKeysResponse
 	if err = readProtoResponse(resp, &data); err != nil {
 		return nil, err
 	}
-	return &ListResponse[string]{
-		Items:      data.Names,
+
+	ls := &Page[DescribeKeyVersionResponse]{
+		Items:      make([]DescribeKeyVersionResponse, 0, len(data.Keys)),
 		ContinueAt: data.ContinueAt,
-	}, nil
+	}
+	for _, k := range data.Keys {
+		var r DescribeKeyVersionResponse
+		if err = r.UnmarshalPB(k); err != nil {
+			return nil, err
+		}
+		ls.Items = append(ls.Items, r)
+	}
+	return ls, nil
 }
 
 // Encrypt encrypts the req.Plaintext with the key req.Name within
@@ -982,13 +1001,13 @@ func (c *Client) DeletePolicy(ctx context.Context, req *DeletePolicyRequest) err
 	return nil
 }
 
-// ListPolicyNames returns a list of policy names within the req.Enclave.
-// The list starts at the given req.Prefix and req.ContinueAt and contains
-// at most req.Limit names.
+// ListPolicies returns the next page of a paginated listing of policies.
+// All policy names start with the req.Prefix and the first policy name
+// matches req.ContinueAt. The page contains at most req.Limit policies.
 //
-// ListEnclaveNames implements paginated listing. For iterating over a stream
-// of policy names combine it with an Iter.
-func (c *Client) ListPolicyNames(ctx context.Context, req *ListRequest) (*ListResponse[string], error) {
+// ListPolicies implements paginated listing. For iterating over a stream
+// of policies combine it with an Iter.
+func (c *Client) ListPolicies(ctx context.Context, req *ListRequest) (*Page[DescribePolicyResponse], error) {
 	const (
 		Method      = http.MethodGet
 		Path        = api.PathPolicyList
@@ -1031,14 +1050,207 @@ func (c *Client) ListPolicyNames(ctx context.Context, req *ListRequest) (*ListRe
 		return nil, readError(resp)
 	}
 
-	var data pb.ListPolicyNamesResponse
+	var data pb.ListPoliciesResponse
 	if err = readProtoResponse(resp, &data); err != nil {
 		return nil, err
 	}
-	return &ListResponse[string]{
-		Items:      data.Names,
+
+	ls := &Page[DescribePolicyResponse]{
+		Items:      make([]DescribePolicyResponse, 0, len(data.Policies)),
 		ContinueAt: data.ContinueAt,
-	}, nil
+	}
+	for _, k := range data.Policies {
+		var r DescribePolicyResponse
+		if err = r.UnmarshalPB(k); err != nil {
+			return nil, err
+		}
+		ls.Items = append(ls.Items, r)
+	}
+	return ls, nil
+}
+
+// CreateIdentity creates a new or overwrites an exisiting identity with the
+// name req.Identity within req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists.
+func (c *Client) CreateIdentity(ctx context.Context, req *CreateIdentityRequest) error {
+	const (
+		Method      = http.MethodPut
+		Path        = api.PathIdentityCreate
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	url, err := c.lb.URL(Path, req.Identity.String())
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
+}
+
+// DescribeIdentity returns metadata about the identity req.Identity within
+// the req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and
+// ErrIdentityNotFound if no such identity exists.
+func (c *Client) DescribeIdentity(ctx context.Context, req *IdentityRequest) (*DescribeIdentityResponse, error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathIdentityDescribe
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Identity.String())
+	if err != nil {
+		return nil, err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data DescribeIdentityResponse
+	if err = readResponse(resp, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// DeleteIdentity deletes the identity with the name req.Identity within req.Enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and ErrIdentityNotFound
+// if such identity exists.
+func (c *Client) DeleteIdentity(ctx context.Context, req *DeleteIdentityRequest) error {
+	const (
+		Method      = http.MethodDelete
+		Path        = api.PathIdentityDelete
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	url, err := c.lb.URL(Path, req.Identity.String())
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
+}
+
+// ListIdentities returns the next page of a paginated listing of identites.
+// All identities start with the req.Prefix and the first identity matches
+// req.ContinueAt. The page contains at most req.Limit identities.
+//
+// ListIdentities implements paginated listing. For iterating over a stream
+// of identities combine it with an Iter.
+func (c *Client) ListIdentities(ctx context.Context, req *ListRequest) (*Page[DescribeIdentityResponse], error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathIdentityList
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+
+		QueryContinue = api.QueryListContinue
+		QueryLimit    = api.QueryListLimit
+	)
+
+	query := url.Values{}
+	if req.ContinueAt != "" {
+		query[QueryContinue] = []string{req.ContinueAt}
+	}
+	if req.Limit > 0 {
+		query[QueryLimit] = []string{strconv.Itoa(req.Limit)}
+	}
+
+	url, err := c.lb.URL(Path, req.Prefix)
+	if err != nil {
+		return nil, err
+	}
+	if len(query) > 0 {
+		url += "?" + query.Encode()
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	var data pb.ListIdentitiesResponse
+	if err = readProtoResponse(resp, &data); err != nil {
+		return nil, err
+	}
+
+	ls := &Page[DescribeIdentityResponse]{
+		Items:      make([]DescribeIdentityResponse, 0, len(data.Identities)),
+		ContinueAt: data.ContinueAt,
+	}
+	for _, k := range data.Identities {
+		var r DescribeIdentityResponse
+		if err = r.UnmarshalPB(k); err != nil {
+			return nil, err
+		}
+		ls.Items = append(ls.Items, r)
+	}
+	return ls, nil
 }
 
 // httpsURL turns the endpoint into an HTTPS endpoint.

@@ -15,7 +15,7 @@ import (
 type Iter[T any] struct {
 	// NextFn is a function that returns the next page from
 	// a paginated list.
-	NextFn func(context.Context, *ListRequest) (*ListResponse[T], error)
+	NextFn func(context.Context, *ListRequest) (*Page[T], error)
 
 	items      []T
 	enclave    string

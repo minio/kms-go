@@ -26,6 +26,12 @@ const (
 	PathPolicyDelete   = "/v1/policy/delete/"
 	PathPolicyList     = "/v1/policy/list/"
 
+	PathIdentityCreate   = "/v1/identity/create/"
+	PathIdentityIssue    = "/v1/identity/issue"
+	PathIdentityDescribe = "/v1/identity/describe/"
+	PathIdentityDelete   = "/v1/identity/delete/"
+	PathIdentityList     = "/v1/identity/list/"
+
 	PathClusterStatus  = "/v1/cluster/status"
 	PathClusterAdd     = "/v1/cluster/add/"
 	PathClusterRemove  = "/v1/cluster/remove/"

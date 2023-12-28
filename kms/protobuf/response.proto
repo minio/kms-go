@@ -153,9 +153,8 @@ message ListAPIsResponse {
   repeated DescribeRouteResponse APIs = 1;
 }
 
-message ListEnclaveNamesResponse {
-  // Names is the list of enclave names.
-  repeated string Names = 1 [ json_name = "names" ];
+message ListEnclavesResponse {
+  repeated DescribeEnclaveResponse Enclaves = 1 [ json_name = "enclaves" ];
 
   string ContinueAt = 2 [ json_name = "continue_at" ];
 }
@@ -177,9 +176,8 @@ message DescribeKeyVersionResponse {
   string CreatedBy = 5 [ json_name="created_by" ];
 }
 
-message ListKeyNamesResponse {
-  // Names is the list of key names.
-  repeated string Names = 1 [ json_name = "names" ];
+message ListKeysResponse {
+  repeated DescribeKeyVersionResponse Keys = 1 [ json_name = "keys" ];
 
   string ContinueAt = 2 [ json_name = "continue_at" ];
 }
@@ -244,9 +242,32 @@ message PolicyResponse {
   string CreatedBy = 5 [ json_name="created_by" ];
 }
 
-message ListPolicyNamesResponse {
-  // Names is the list of policy names.
-  repeated string Names = 1 [ json_name = "names" ];
+message ListPoliciesResponse {
+  repeated DescribePolicyResponse Policies = 1 [ json_name = "policies" ];
+
+  string ContinueAt = 2 [ json_name = "continue_at" ];
+}
+
+message DescribeIdentityResponse {
+  string Identity = 1 [ json_name = "identity" ];
+
+  uint32 Privilege = 2 [ json_name = "privilege" ];
+
+  string Policy = 3 [ json_name = "policy" ];
+
+  // CreatedAt is the point in time when this identity got created.
+  google.protobuf.Timestamp CreatedAt = 4 [ json_name = "created_at" ];
+
+  // CreatedBy is the identity that created this identity.
+  string CreatedBy = 5 [ json_name = "created_by" ];
+
+  bool IsServiceAccount = 6 [ json_name = "is_service_account" ];
+
+  repeated string ServiceAccounts = 7 [ json_name = "service_accounts" ];
+}
+
+message ListIdentitiesResponse {
+  repeated DescribeIdentityResponse Identities = 1 [ json_name = "identities" ];
 
   string ContinueAt = 2 [ json_name = "continue_at" ];
 }
