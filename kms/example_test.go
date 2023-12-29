@@ -12,21 +12,21 @@ import (
 )
 
 func ExampleParseAPIKey() {
-	key, err := kms.ParseAPIKey("k1:d7cY/5k8HbBGkZpoy2hGmvkxg83QDBXsA/nFXDfTk2E")
+	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(key)
 	// Output:
-	// k1:d7cY/5k8HbBGkZpoy2hGmvkxg83QDBXsA/nFXDfTk2E
+	// k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E
 }
 
 func ExampleAPIKey_Identity() {
-	key, err := kms.ParseAPIKey("k1:d7cY/5k8HbBGkZpoy2hGmvkxg83QDBXsA/nFXDfTk2E")
+	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(key.Identity())
 	// Output:
-	// h1:Rvxa7nj8zkL48CeDkN6LhpX+K7KK6uhIhpBOcTHNhWw
+	// h1:Rvxa7nj8zkL48CeDkN6LhpX-K7KK6uhIhpBOcTHNhWw
 }

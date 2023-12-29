@@ -19,11 +19,11 @@ import (
 
 // An Identity uniquely identifies a private/public key pair.
 // It consists of a prefix for the hash function followed by
-// the base64-encoded hash of the public key.
+// the URL base64-encoded hash of the public key.
 //
 // For example:
 //
-//	h1:Rvxa7nj8zkL48CeDkN6LhpX+K7KK6uhIhpBOcTHNhWws
+//	h1:BPbFim5DqUozIYOjcaRAtImU6TdD6W2_chOgxDyCuDw
 //
 // This package uses the "h1:" prefix for SHA-256 and computes
 // the hash of X.509 certificates from the certificate's
@@ -32,7 +32,7 @@ import (
 // For example:
 //
 //	shasum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
-//	identity := "h1:" + base64.RawStdEncoding.EncodeToString(shasum[:])
+//	identity := "h1:" + base64.RawURLEncoding.EncodeToString(shasum[:])
 //
 // By verifying the peer's identity, two parties can detect
 // MitM¹ attacks during a protocol handshake, like in TLS.
@@ -155,11 +155,11 @@ func ParseAPIKey(s string) (APIKey, error) {
 		return nil, errors.New("kms: invalid API key type")
 	}
 
-	if base64.RawStdEncoding.DecodedLen(len(s)) != ed25519.SeedSize {
+	if base64.RawURLEncoding.DecodedLen(len(s)) != ed25519.SeedSize {
 		return nil, errors.New("kms: invalid API key length")
 	}
 
-	b, err := base64.RawStdEncoding.DecodeString(s)
+	b, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (ak *apiKey) Private() crypto.PrivateKey {
 func (ak *apiKey) Identity() Identity { return ak.identity }
 
 func (ak *apiKey) String() string {
-	return "k1:" + base64.RawStdEncoding.EncodeToString(ak.key[:ed25519.SeedSize])
+	return "k1:" + base64.RawURLEncoding.EncodeToString(ak.key[:ed25519.SeedSize])
 }
 
 func ed25519Identity(pubKey []byte) (Identity, error) {
@@ -213,5 +213,5 @@ func ed25519Identity(pubKey []byte) (Identity, error) {
 		return "", err
 	}
 	id := sha256.Sum256(derPublicKey)
-	return "h1:" + Identity(base64.RawStdEncoding.EncodeToString(id[:])), nil
+	return "h1:" + Identity(base64.RawURLEncoding.EncodeToString(id[:])), nil
 }
