@@ -464,6 +464,54 @@ func (x *CreatePolicyRequest) GetDeny() map[string]string {
 	return nil
 }
 
+type AssignPolicyRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Identity is the identity to which the policy should apply.
+	Identity string `protobuf:"bytes,1,opt,name=Identity,json=identity,proto3" json:"Identity,omitempty"`
+}
+
+func (x *AssignPolicyRequest) Reset() {
+	*x = AssignPolicyRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_request_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AssignPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AssignPolicyRequest) ProtoMessage() {}
+
+func (x *AssignPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_request_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AssignPolicyRequest.ProtoReflect.Descriptor instead.
+func (*AssignPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_request_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *AssignPolicyRequest) GetIdentity() string {
+	if x != nil {
+		return x.Identity
+	}
+	return ""
+}
+
 type CreateIdentityRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -479,7 +527,7 @@ type CreateIdentityRequest struct {
 func (x *CreateIdentityRequest) Reset() {
 	*x = CreateIdentityRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_request_proto_msgTypes[7]
+		mi := &file_request_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -492,7 +540,7 @@ func (x *CreateIdentityRequest) String() string {
 func (*CreateIdentityRequest) ProtoMessage() {}
 
 func (x *CreateIdentityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_request_proto_msgTypes[7]
+	mi := &file_request_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -505,7 +553,7 @@ func (x *CreateIdentityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateIdentityRequest.ProtoReflect.Descriptor instead.
 func (*CreateIdentityRequest) Descriptor() ([]byte, []int) {
-	return file_request_proto_rawDescGZIP(), []int{7}
+	return file_request_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CreateIdentityRequest) GetPrivilege() string {
@@ -579,14 +627,18 @@ var file_request_proto_rawDesc = []byte{
 	0x09, 0x44, 0x65, 0x6e, 0x79, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65,
 	0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05,
 	0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c,
-	0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x60, 0x0a, 0x15, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65,
-	0x49, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
-	0x1c, 0x0a, 0x09, 0x50, 0x72, 0x69, 0x76, 0x69, 0x6c, 0x65, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x09, 0x70, 0x72, 0x69, 0x76, 0x69, 0x6c, 0x65, 0x67, 0x65, 0x12, 0x29, 0x0a,
-	0x10, 0x49, 0x73, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e,
-	0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0f, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
-	0x5f, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x42, 0x0e, 0x5a, 0x0c, 0x6b, 0x6d, 0x73, 0x2f,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x31, 0x0a, 0x13, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e,
+	0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1a, 0x0a,
+	0x08, 0x49, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x08, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x22, 0x60, 0x0a, 0x15, 0x43, 0x72, 0x65,
+	0x61, 0x74, 0x65, 0x49, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x1c, 0x0a, 0x09, 0x50, 0x72, 0x69, 0x76, 0x69, 0x6c, 0x65, 0x67, 0x65, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x70, 0x72, 0x69, 0x76, 0x69, 0x6c, 0x65, 0x67, 0x65,
+	0x12, 0x29, 0x0a, 0x10, 0x49, 0x73, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x41, 0x63, 0x63,
+	0x6f, 0x75, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0f, 0x73, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x5f, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x42, 0x0e, 0x5a, 0x0c, 0x6b,
+	0x6d, 0x73, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x62, 0x06, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x33,
 }
 
 var (
@@ -601,7 +653,7 @@ func file_request_proto_rawDescGZIP() []byte {
 	return file_request_proto_rawDescData
 }
 
-var file_request_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_request_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_request_proto_goTypes = []interface{}{
 	(*EditClusterRequest)(nil),    // 0: minio.kms.EditClusterRequest
 	(*CreateKeyRequest)(nil),      // 1: minio.kms.CreateKeyRequest
@@ -610,18 +662,19 @@ var file_request_proto_goTypes = []interface{}{
 	(*GenerateKeyRequest)(nil),    // 4: minio.kms.GenerateKeyRequest
 	(*DecryptRequest)(nil),        // 5: minio.kms.DecryptRequest
 	(*CreatePolicyRequest)(nil),   // 6: minio.kms.CreatePolicyRequest
-	(*CreateIdentityRequest)(nil), // 7: minio.kms.CreateIdentityRequest
-	nil,                           // 8: minio.kms.CreatePolicyRequest.AllowEntry
-	nil,                           // 9: minio.kms.CreatePolicyRequest.DenyEntry
+	(*AssignPolicyRequest)(nil),   // 7: minio.kms.AssignPolicyRequest
+	(*CreateIdentityRequest)(nil), // 8: minio.kms.CreateIdentityRequest
+	nil,                           // 9: minio.kms.CreatePolicyRequest.AllowEntry
+	nil,                           // 10: minio.kms.CreatePolicyRequest.DenyEntry
 }
 var file_request_proto_depIdxs = []int32{
-	8, // 0: minio.kms.CreatePolicyRequest.Allow:type_name -> minio.kms.CreatePolicyRequest.AllowEntry
-	9, // 1: minio.kms.CreatePolicyRequest.Deny:type_name -> minio.kms.CreatePolicyRequest.DenyEntry
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	9,  // 0: minio.kms.CreatePolicyRequest.Allow:type_name -> minio.kms.CreatePolicyRequest.AllowEntry
+	10, // 1: minio.kms.CreatePolicyRequest.Deny:type_name -> minio.kms.CreatePolicyRequest.DenyEntry
+	2,  // [2:2] is the sub-list for method output_type
+	2,  // [2:2] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_request_proto_init() }
@@ -715,6 +768,18 @@ func file_request_proto_init() {
 			}
 		}
 		file_request_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AssignPolicyRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_request_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CreateIdentityRequest); i {
 			case 0:
 				return &v.state
@@ -735,7 +800,7 @@ func file_request_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_request_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

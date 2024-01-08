@@ -92,6 +92,11 @@ message CreatePolicyRequest {
   map<string, string> Deny = 2 [ json_name = "deny" ];
 }
 
+message AssignPolicyRequest {
+	// Identity is the identity to which the policy should apply.
+  string Identity = 1 [ json_name = "identity" ];
+}
+
 message CreateIdentityRequest {
   // Privilege is the privilege the identity has. Either, "SysAdmin", "Admin" or
   // "User".

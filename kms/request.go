@@ -380,6 +380,38 @@ func (r *CreatePolicyRequest) UnmarshalPB(v *pb.CreatePolicyRequest) error {
 	return nil
 }
 
+// AssignPolicyRequest contains options for assigning a policy to an identity.
+type AssignPolicyRequest struct {
+	// Enclave is the KMS enclave containing the policy and identity.
+	Enclave string
+
+	// Policy is the name of the policy that gets assigned to the identity.
+	Policy string
+
+	// Identity is the identity to which the policy should apply.
+	Identity Identity
+}
+
+// MarshalPB converts the AssignPolicyRequest into its protobuf representation.
+func (r *AssignPolicyRequest) MarshalPB(v *pb.AssignPolicyRequest) error {
+	if r.Identity == "" {
+		return errors.New("kms: identity is empty")
+	}
+
+	v.Identity = r.Identity.String()
+	return nil
+}
+
+// UnmarshalPB initializes the AssignPolicyRequest from its protobuf representation.
+func (r *AssignPolicyRequest) UnmarshalPB(v *pb.AssignPolicyRequest) error {
+	if v.Identity == "" {
+		return errors.New("kms: identity is empty")
+	}
+
+	r.Identity = Identity(v.Identity)
+	return nil
+}
+
 // PolicyRequest contains options for fetching a policy and
 // policy metadata.
 type PolicyRequest struct {

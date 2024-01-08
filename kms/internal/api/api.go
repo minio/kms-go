@@ -21,6 +21,7 @@ const (
 	PathSecretKeyDecrypt  = "/v1/key/decrypt/"
 
 	PathPolicyCreate   = "/v1/policy/create/"
+	PathPolicyAssign   = "/v1/policy/assign/"
 	PathPolicyDescribe = "/v1/policy/describe/"
 	PathPolicyRead     = "/v1/policy/read/"
 	PathPolicyDelete   = "/v1/policy/delete/"

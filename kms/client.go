@@ -885,6 +885,47 @@ func (c *Client) CreatePolicy(ctx context.Context, req *CreatePolicyRequest) err
 	return nil
 }
 
+// AssignPolicy assigns the req.Policy within req.Enclave to the req.Identity.
+// Both, the policy and identity, must reside within the same enclave.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists, ErrPolicyNotFound
+// if no such policy exists and ErrIdentityNotFound if no such identity exists.
+func (c *Client) AssignPolicy(ctx context.Context, req *AssignPolicyRequest) error {
+	const (
+		Method      = http.MethodPatch
+		Path        = api.PathPolicyAssign
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	url, err := c.lb.URL(Path, req.Policy)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	r.Header.Set(headers.Accept, ContentType)
+	r.Header.Set(headers.Enclave, req.Enclave)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return readError(resp)
+	}
+	return nil
+}
+
 // DescribePolicy returns metadata about the policy req.Name within
 // the req.Enclave.
 //
