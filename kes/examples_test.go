@@ -65,28 +65,6 @@ func ExampleNewClientWithConfig() {
 	// Identity: 3ecfcdf38fcbe141ae26a1030f81e96b753365a46760ae6b578698a97c59fd22
 }
 
-func ExampleClient_Enclave() {
-	const (
-		Endpoint = "https://play.min.io:7373"
-		APIKey   = "kes:v1:AD9E7FSYWrMD+VjhI6q545cYT9YOyFxZb7UnjEepYDRc"
-	)
-
-	key, err := kes.ParseAPIKey(APIKey)
-	if err != nil {
-		log.Fatalf("Invalid API key '%s': %v", APIKey, err)
-	}
-	client, err := kes.NewClient(Endpoint, key)
-	if err != nil {
-		log.Fatalf("Failed to create client for '%s': %v", Endpoint, err)
-	}
-	enclave := client.Enclave("my-enclave")
-	_ = enclave
-
-	fmt.Println("Identity:", key.Identity())
-	// Output:
-	// Identity: 3ecfcdf38fcbe141ae26a1030f81e96b753365a46760ae6b578698a97c59fd22
-}
-
 func ExampleListIter() {
 	const (
 		Endpoint = "https://play.min.io:7373"
