@@ -536,6 +536,49 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 	return response.Plaintext, nil
 }
 
+// HMAC returns the HMAC of the given message using the key with the given name.
+// It returns ErrKeyNotFound if no such key exists.
+func (c *Client) HMAC(ctx context.Context, key string, message []byte) ([]byte, error) {
+	const (
+		APIPath         = "/v1/key/hmac"
+		Method          = http.MethodPut
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.KB
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	type Request struct {
+		Message []byte `json:"message"`
+	}
+	type Response struct {
+		Sum []byte `json:"hmac"`
+	}
+
+	body, err := json.Marshal(Request{
+		Message: message,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, key), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return response.Sum, nil
+}
+
 // ListKeys returns a paginated list of key names from the server,
 // starting at the specified prefix. If n > 0, it returns at most n names.
 // Otherwise, the server determines the page size.
