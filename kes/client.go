@@ -9,6 +9,9 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
+	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,6 +21,8 @@ import (
 	"time"
 
 	"aead.dev/mem"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 )
 
 // Client is a KES client. Usually, a new client is
@@ -115,15 +120,6 @@ func NewClientWithConfig(endpoint string, config *tls.Config) *Client {
 				TLSClientConfig:       config,
 			},
 		},
-	}
-}
-
-// Enclave returns a new Enclave with the given name.
-func (c *Client) Enclave(name string) *Enclave {
-	return &Enclave{
-		Name:       name,
-		Endpoints:  append(make([]string, 0, len(c.Endpoints)), c.Endpoints...),
-		HTTPClient: c.HTTPClient,
 	}
 }
 
@@ -259,289 +255,126 @@ func (c *Client) APIs(ctx context.Context) ([]API, error) {
 	return apis, nil
 }
 
-// ExpandCluster expands a KES cluster by adding a new node with
-// the given endpoint.
-func (c *Client) ExpandCluster(ctx context.Context, endpoint string) error {
-	const (
-		APIPath  = "/v1/cluster/expand"
-		Method   = http.MethodPut
-		StatusOK = http.StatusOK
-	)
-	type Request struct {
-		Endpoint string `json:"endpoint"`
-	}
-	c.init.Do(c.initLoadBalancer)
-
-	body, err := json.Marshal(Request{
-		Endpoint: endpoint,
-	})
-	if err != nil {
-		return err
-	}
-
-	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, APIPath, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
-}
-
-// DescribeCluster returns the KeyCluster for the current cluster.
-func (c *Client) DescribeCluster(ctx context.Context) (*ClusterInfo, error) {
-	const (
-		APIPath         = "/v1/cluster/describe"
-		Method          = http.MethodGet
-		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 * mem.MiB
-	)
-	type Response struct {
-		Nodes  map[uint64]string `json:"nodes"`
-		Leader uint64            `json:"leader_id"`
-	}
-	c.init.Do(c.initLoadBalancer)
-
-	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-	var response Response
-	if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
-		return nil, err
-	}
-	return &ClusterInfo{
-		Nodes:  response.Nodes,
-		Leader: response.Leader,
-	}, nil
-}
-
-// ShrinkCluster shrinks a KES cluster by removingt the new node with
-// the given endpoint from the cluster.
-func (c *Client) ShrinkCluster(ctx context.Context, endpoint string) error {
-	const (
-		APIPath  = "/v1/cluster/shrink"
-		Method   = http.MethodDelete
-		StatusOK = http.StatusOK
-	)
-	type Request struct {
-		Endpoint string `json:"endpoint"`
-	}
-	c.init.Do(c.initLoadBalancer)
-
-	body, err := json.Marshal(Request{
-		Endpoint: endpoint,
-	})
-	if err != nil {
-		return err
-	}
-
-	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, APIPath, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
-}
-
-// CreateEnclave creates a new enclave with the given
-// identity as enclave admin. Only the KES system
-// admin can create new enclaves.
-//
-// It returns ErrEnclaveExists if the enclave already
-// exists.
-func (c *Client) CreateEnclave(ctx context.Context, name string) error {
-	const (
-		APIPath  = "/v1/enclave/create"
-		Method   = http.MethodPut
-		StatusOK = http.StatusOK
-	)
-	c.init.Do(c.initLoadBalancer)
-
-	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
-}
-
-// DescribeEnclave returns an EnclaveInfo describing the
-// specified enclave. Only the KES system admin can create
-// fetch enclave descriptions.
-//
-// It returns ErrEnclaveNotFound if the enclave does not
-// exists.
-func (c *Client) DescribeEnclave(ctx context.Context, name string) (*EnclaveInfo, error) {
-	const (
-		APIPath         = "/v1/enclave/describe"
-		Method          = http.MethodGet
-		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 * mem.MiB
-	)
-	type Response struct {
-		Name      string    `json:"name"`
-		CreatedAt time.Time `json:"created_at"`
-		CreatedBy Identity  `json:"created_by"`
-	}
-	c.init.Do(c.initLoadBalancer)
-
-	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-
-	var response Response
-	if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
-		return nil, err
-	}
-	return &EnclaveInfo{
-		Name:      response.Name,
-		CreatedAt: response.CreatedAt,
-		CreatedBy: response.CreatedBy,
-	}, nil
-}
-
-// ListEnclaves returns a paginated list of enclave names from the server,
-// starting at the specified prefix. If n > 0, it returns at most n names.
-// Otherwise, the server determines the page size.
-//
-// ListEnclaves also returns a continuation token for fetching the next batch.
-// When the listing reaches the end, the continuation token will be empty.
-//
-// The ListIter type can be used as a convenient way to iterate over a paginated list.
-func (c *Client) ListEnclaves(ctx context.Context, prefix string, n int) ([]string, string, error) {
-	const (
-		APIPath         = "/v1/enclave/list"
-		Method          = http.MethodGet
-		StatusOK        = http.StatusOK
-		MaxResponseSize = 1 * mem.MiB
-	)
-	type Response struct {
-		Names      []string `json:"names"`
-		ContinueAt string   `json:"continue_at"`
-	}
-	c.init.Do(c.initLoadBalancer)
-
-	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, prefix), nil)
-	if err != nil {
-		return nil, "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return nil, "", parseErrorResponse(resp)
-	}
-
-	var response Response
-	if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
-		return nil, "", err
-	}
-	if n > 0 && n < len(response.Names) {
-		return response.Names[:n], response.Names[n], nil
-	}
-	return response.Names, response.ContinueAt, nil
-}
-
-// DeleteEnclave delete the specified enclave. Only the
-// KES system admin can delete enclaves.
-//
-// It returns ErrEnclaveNotFound if the enclave does not
-// exist.
-func (c *Client) DeleteEnclave(ctx context.Context, name string) error {
-	const (
-		APIPath  = "/v1/enclave/delete"
-		Method   = http.MethodDelete
-		StatusOK = http.StatusOK
-	)
-	c.init.Do(c.initLoadBalancer)
-
-	client := retry(c.HTTPClient)
-	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != StatusOK {
-		return parseErrorResponse(resp)
-	}
-	return nil
-}
-
 // CreateKey creates a new cryptographic key. The key will
 // be generated by the KES server.
 //
 // It returns ErrKeyExists if a key with the same name already
 // exists.
 func (c *Client) CreateKey(ctx context.Context, name string) error {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath  = "/v1/key/create"
+		Method   = http.MethodPost
+		StatusOK = http.StatusOK
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
+	if err != nil {
+		return err
 	}
-	return enclave.CreateKey(ctx, name)
+	if resp.StatusCode != StatusOK {
+		return parseErrorResponse(resp)
+	}
+	return nil
 }
 
 // ImportKey imports the given key into a KES server. It
 // returns ErrKeyExists if a key with the same key already
 // exists.
 func (c *Client) ImportKey(ctx context.Context, name string, req *ImportKeyRequest) error {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath  = "/v1/key/import"
+		Method   = http.MethodPost
+		StatusOK = http.StatusOK
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	type Request struct {
+		Key    []byte `json:"key"`
+		Cipher string `json:"cipher"`
 	}
-	return enclave.ImportKey(ctx, name, req)
+	body, err := json.Marshal(Request{
+		Key:    req.Key,
+		Cipher: req.Cipher.String(),
+	})
+	if err != nil {
+		return err
+	}
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != StatusOK {
+		return parseErrorResponse(resp)
+	}
+	return nil
 }
 
 // DescribeKey returns the KeyInfo for the given key.
 // It returns ErrKeyNotFound if no such key exists.
 func (c *Client) DescribeKey(ctx context.Context, name string) (*KeyInfo, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath         = "/v1/key/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	type Response struct {
+		Name      string       `json:"name"`
+		ID        string       `json:"id"`
+		Algorithm KeyAlgorithm `json:"algorithm"`
+		CreatedAt time.Time    `json:"created_at"`
+		CreatedBy Identity     `json:"created_by"`
 	}
-	return enclave.DescribeKey(ctx, name)
+	c.init.Do(c.initLoadBalancer)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err := json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return &KeyInfo{
+		Name:      response.Name,
+		Algorithm: response.Algorithm,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}, nil
 }
 
 // DeleteKey deletes the key from a KES server. It returns
 // ErrKeyNotFound if no such key exists.
 func (c *Client) DeleteKey(ctx context.Context, name string) error {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath  = "/v1/key/delete"
+		Method   = http.MethodDelete
+		StatusOK = http.StatusOK
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
+	if err != nil {
+		return err
 	}
-	return enclave.DeleteKey(ctx, name)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return parseErrorResponse(resp)
+	}
+	return nil
 }
 
 // GenerateKey returns a new generated data encryption key (DEK).
@@ -563,12 +396,45 @@ func (c *Client) DeleteKey(ctx context.Context, name string) error {
 // GenerateKey returns ErrKeyNotFound if no key with the given name
 // exists.
 func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (DEK, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath         = "/v1/key/generate"
+		Method          = http.MethodPost
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	type Request struct {
+		Context []byte `json:"context,omitempty"` // A context is optional
 	}
-	return enclave.GenerateKey(ctx, name, context)
+	type Response struct {
+		Plaintext  []byte `json:"plaintext"`
+		Ciphertext []byte `json:"ciphertext"`
+	}
+
+	body, err := json.Marshal(Request{
+		Context: context,
+	})
+	if err != nil {
+		return DEK{}, err
+	}
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	if err != nil {
+		return DEK{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return DEK{}, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return DEK{}, err
+	}
+	return DEK(response), nil
 }
 
 // Encrypt encrypts the given plaintext with the named key at the
@@ -579,12 +445,46 @@ func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (
 // Encrypt returns ErrKeyNotFound if no such key exists at the KES
 // server.
 func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []byte) ([]byte, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath         = "/v1/key/encrypt"
+		Method          = http.MethodPost
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	type Request struct {
+		Plaintext []byte `json:"plaintext"`
+		Context   []byte `json:"context,omitempty"` // A context is optional
 	}
-	return enclave.Encrypt(ctx, name, plaintext, context)
+	type Response struct {
+		Ciphertext []byte `json:"ciphertext"`
+	}
+
+	body, err := json.Marshal(Request{
+		Plaintext: plaintext,
+		Context:   context,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return response.Ciphertext, nil
 }
 
 // Decrypt decrypts the ciphertext with the named key at the KES
@@ -595,12 +495,45 @@ func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []
 // ErrDecrypt when the ciphertext has been modified or a different
 // context value is provided.
 func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context []byte) ([]byte, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath         = "/v1/key/decrypt"
+		Method          = http.MethodPost
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	type Request struct {
+		Ciphertext []byte `json:"ciphertext"`
+		Context    []byte `json:"context,omitempty"` // A context is optional
 	}
-	return enclave.Decrypt(ctx, name, ciphertext, context)
+	type Response struct {
+		Plaintext []byte `json:"plaintext"`
+	}
+	body, err := json.Marshal(Request{
+		Ciphertext: ciphertext,
+		Context:    context,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), bytes.NewReader(body), withHeader("Content-Type", "application/json"))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return response.Plaintext, nil
 }
 
 // ListKeys returns a paginated list of key names from the server,
@@ -612,126 +545,115 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 //
 // The ListIter type can be used as a convenient way to iterate over a paginated list.
 func (c *Client) ListKeys(ctx context.Context, prefix string, n int) ([]string, string, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath         = "/v1/key/list"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	type Response struct {
+		Names      []string `json:"names"`
+		ContinueAt string   `json:"continue_at"`
 	}
-	return enclave.ListKeys(ctx, prefix, n)
-}
+	c.init.Do(c.initLoadBalancer)
 
-// CreateSecret creates a new secret with the given name.
-//
-// It returns ErrSecretExists if a secret with the same name
-// already exists.
-func (c *Client) CreateSecret(ctx context.Context, name string, value []byte, options *SecretOptions) error {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, prefix), nil)
+	if err != nil {
+		return nil, "", err
 	}
-	return enclave.CreateSecret(ctx, name, value, options)
-}
+	defer resp.Body.Close()
 
-// DescribeSecret returns the SecretInfo for the given secret.
-//
-// It returns ErrSecretNotFound if no such secret exists.
-func (c *Client) DescribeSecret(ctx context.Context, name string) (*SecretInfo, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	if resp.StatusCode != StatusOK {
+		return nil, "", parseErrorResponse(resp)
 	}
-	return enclave.DescribeSecret(ctx, name)
-}
 
-// ReadSecret returns the secret with the given name.
-//
-// It returns ErrSecretNotFound if no such secret exists.
-func (c *Client) ReadSecret(ctx context.Context, name string) ([]byte, *SecretInfo, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	if resp.Header.Get("Content-Type") == "application/x-ndjson" {
+		return parseLegacyListing(resp.Body, n)
 	}
-	return enclave.ReadSecret(ctx, name)
-}
-
-// DeleteSecret deletes the secret with the given name.
-//
-// It returns ErrSecretNotFound if no such secret exists.
-func (c *Client) DeleteSecret(ctx context.Context, name string) error {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, "", err
 	}
-	return enclave.DeleteSecret(ctx, name)
-}
-
-// ListSecrets returns a paginated list of secret names from the server,
-// starting at the specified prefix. If n > 0, it returns at most n names.
-// Otherwise, the server determines the page size.
-//
-// ListSecrets also returns a continuation token for fetching the next batch.
-// When the listing reaches the end, the continuation token will be empty.
-//
-// The ListIter type can be used as a convenient way to iterate over a paginated list.
-func (c *Client) ListSecrets(ctx context.Context, prefix string, n int) ([]string, string, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
-	}
-	return enclave.ListSecrets(ctx, prefix, n)
-}
-
-// CreatePolicy creates a new policy.
-//
-// It returns ErrPolicyExists if such a policy already exists.
-func (c *Client) CreatePolicy(ctx context.Context, name string, policy *Policy) error {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
-	}
-	return enclave.CreatePolicy(ctx, name, policy)
+	return response.Names, response.ContinueAt, nil
 }
 
 // DescribePolicy returns the PolicyInfo for the given policy.
 // It returns ErrPolicyNotFound if no such policy exists.
 func (c *Client) DescribePolicy(ctx context.Context, name string) (*PolicyInfo, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath         = "/v1/policy/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	type Response struct {
+		CreatedAt time.Time `json:"created_at"`
+		CreatedBy Identity  `json:"created_by"`
 	}
-	return enclave.DescribePolicy(ctx, name)
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return &PolicyInfo{
+		Name:      name,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}, nil
 }
 
 // GetPolicy returns the policy with the given name.
 // It returns ErrPolicyNotFound if no such policy
 // exists.
 func (c *Client) GetPolicy(ctx context.Context, name string) (*Policy, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
-	}
-	return enclave.GetPolicy(ctx, name)
-}
+	const (
+		APIPath         = "/v1/policy/read"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	c.init.Do(c.initLoadBalancer)
 
-// DeletePolicy deletes the policy with the given name. Any
-// assigned identities will be removed as well.
-//
-// It returns ErrPolicyNotFound if no such policy exists.
-func (c *Client) DeletePolicy(ctx context.Context, name string) error {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	type Response struct {
+		Allow     map[string]Rule `json:"allow"`
+		Deny      map[string]Rule `json:"deny"`
+		CreatedAt time.Time       `json:"created_at"`
+		CreatedBy Identity        `json:"created_by"`
 	}
-	return enclave.DeletePolicy(ctx, name)
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, name), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	return &Policy{
+		Allow:     response.Allow,
+		Deny:      response.Deny,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+	}, nil
 }
 
 // ListPolicies returns a paginated list of policy names from the server,
@@ -743,36 +665,87 @@ func (c *Client) DeletePolicy(ctx context.Context, name string) error {
 //
 // The ListIter type can be used as a convenient way to iterate over a paginated list.
 func (c *Client) ListPolicies(ctx context.Context, prefix string, n int) ([]string, string, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath         = "/v1/policy/list"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	type Response struct {
+		Names      []string `json:"names"`
+		ContinueAt string   `json:"continue_at"`
 	}
-	return enclave.ListPolicies(ctx, prefix, n)
-}
+	c.init.Do(c.initLoadBalancer)
 
-// AssignPolicy assigns the policy to the identity.
-// The KES admin identity cannot be assigned to any
-// policy.
-//
-// AssignPolicy returns PolicyNotFound if no such policy exists.
-func (c *Client) AssignPolicy(ctx context.Context, policy string, identity Identity) error {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, prefix), nil)
+	if err != nil {
+		return nil, "", err
 	}
-	return enclave.AssignPolicy(ctx, policy, identity)
+	if resp.StatusCode != StatusOK {
+		return nil, "", parseErrorResponse(resp)
+	}
+
+	if resp.Header.Get("Content-Type") == "application/x-ndjson" {
+		return parseLegacyListing(resp.Body, n)
+	}
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, "", err
+	}
+	return response.Names, response.ContinueAt, nil
 }
 
 // DescribeIdentity returns an IdentityInfo describing the given identity.
 func (c *Client) DescribeIdentity(ctx context.Context, identity Identity) (*IdentityInfo, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath         = "/v1/identity/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	type Response struct {
+		Policy    string     `json:"policy"`
+		IsAdmin   bool       `json:"admin"`
+		TTL       string     `json:"ttl"`
+		ExpiresAt time.Time  `json:"expires_at"`
+		CreatedAt time.Time  `json:"created_at"`
+		CreatedBy Identity   `json:"created_by"`
+		Children  []Identity `json:"children"`
 	}
-	return enclave.DescribeIdentity(ctx, identity)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, identity.String()), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, err
+	}
+	var ttl time.Duration
+	if response.TTL != "" {
+		ttl, err = time.ParseDuration(response.TTL)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &IdentityInfo{
+		Identity:  identity,
+		Policy:    response.Policy,
+		IsAdmin:   response.IsAdmin,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+		TTL:       ttl,
+		ExpiresAt: response.ExpiresAt,
+	}, nil
 }
 
 // DescribeSelf returns an IdentityInfo describing the identity
@@ -782,26 +755,63 @@ func (c *Client) DescribeIdentity(ctx context.Context, identity Identity) (*Iden
 // DescribeSelf allows an application to obtain identity and
 // policy information about itself.
 func (c *Client) DescribeSelf(ctx context.Context) (*IdentityInfo, *Policy, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
-	}
-	return enclave.DescribeSelf(ctx)
-}
+	const (
+		APIPath         = "/v1/identity/self/describe"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	c.init.Do(c.initLoadBalancer)
 
-// DeleteIdentity removes the identity. Once removed, any
-// operation issued by this identity will fail with
-// ErrNotAllowed.
-//
-// The KES admin identity cannot be removed.
-func (c *Client) DeleteIdentity(ctx context.Context, identity Identity) error {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	type Response struct {
+		Identity  Identity   `json:"identity"`
+		IsAdmin   bool       `json:"admin"`
+		TTL       string     `json:"ttl"`
+		ExpiresAt time.Time  `json:"expires_at"`
+		CreatedAt time.Time  `json:"created_at"`
+		CreatedBy Identity   `json:"created_by"`
+		Children  []Identity `json:"children"`
+
+		Policy string          `json:"policy"`
+		Allow  map[string]Rule `json:"allow"`
+		Deny   map[string]Rule `json:"deny"`
 	}
-	return enclave.DeleteIdentity(ctx, identity)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, nil, parseErrorResponse(resp)
+	}
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, nil, err
+	}
+	var ttl time.Duration
+	if response.TTL != "" {
+		ttl, err = time.ParseDuration(response.TTL)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	info := &IdentityInfo{
+		Identity:  response.Identity,
+		Policy:    response.Policy,
+		CreatedAt: response.CreatedAt,
+		CreatedBy: response.CreatedBy,
+		IsAdmin:   response.IsAdmin,
+		TTL:       ttl,
+		ExpiresAt: response.ExpiresAt,
+	}
+	policy := &Policy{
+		Allow: response.Allow,
+		Deny:  response.Deny,
+	}
+	return info, policy, nil
 }
 
 // ListIdentities returns a paginated list of identities from the server,
@@ -813,12 +823,35 @@ func (c *Client) DeleteIdentity(ctx context.Context, identity Identity) error {
 //
 // The ListIter type can be used as a convenient way to iterate over a paginated list.
 func (c *Client) ListIdentities(ctx context.Context, prefix string, n int) ([]Identity, string, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath         = "/v1/identity/list"
+		Method          = http.MethodGet
+		StatusOK        = http.StatusOK
+		MaxResponseSize = 1 * mem.MiB
+	)
+	type Response struct {
+		Names      []Identity `json:"identities"`
+		ContinueAt string     `json:"continue_at"`
 	}
-	return enclave.ListIdentities(ctx, prefix, n)
+	c.init.Do(c.initLoadBalancer)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, join(APIPath, prefix), nil)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, "", parseErrorResponse(resp)
+	}
+
+	if resp.Header.Get("Content-Type") == "application/x-ndjson" {
+		return parseLegacyIdentityListing(resp.Body, n)
+	}
+	var response Response
+	if err = json.NewDecoder(mem.LimitReader(resp.Body, MaxResponseSize)).Decode(&response); err != nil {
+		return nil, "", err
+	}
+	return response.Names, response.ContinueAt, nil
 }
 
 // AuditLog returns a stream of audit events produced by the
@@ -878,12 +911,117 @@ func (c *Client) ErrorLog(ctx context.Context) (*ErrorStream, error) {
 // It returns ErrNotAllowed if the client does not
 // have sufficient permissions to fetch server metrics.
 func (c *Client) Metrics(ctx context.Context) (Metric, error) {
-	enclave := Enclave{
-		Endpoints:  c.Endpoints,
-		HTTPClient: c.HTTPClient,
-		lb:         c.lb,
+	const (
+		APIPath        = "/v1/metrics"
+		Method         = http.MethodGet
+		StatusOK       = http.StatusOK
+		MaxResponeSize = 1 * mem.MiB
+	)
+	c.init.Do(c.initLoadBalancer)
+
+	client := retry(c.HTTPClient)
+	resp, err := c.lb.Send(ctx, &client, Method, APIPath, nil)
+	if err != nil {
+		return Metric{}, err
 	}
-	return enclave.Metrics(ctx)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return Metric{}, parseErrorResponse(resp)
+	}
+
+	const (
+		MetricRequestOK         = "kes_http_request_success"
+		MetricRequestErr        = "kes_http_request_error"
+		MetricRequestFail       = "kes_http_request_failure"
+		MetricRequestActive     = "kes_http_request_active"
+		MetricAuditEvents       = "kes_log_audit_events"
+		MetricErrorEvents       = "kes_log_error_events"
+		MetricResponseTime      = "kes_http_response_time"
+		MetricSystemUpTme       = "kes_system_up_time"
+		MetricSystemCPUs        = "kes_system_num_cpu"
+		MetricSystemUsableCPUs  = "kes_system_num_cpu_used"
+		MetricSystemThreads     = "kes_system_num_threads"
+		MetricSystemHeapUsed    = "kes_system_mem_heap_used"
+		MetricSystemHeapObjects = "kes_system_mem_heap_objects"
+		MetricSystemStackUsed   = "kes_system_mem_stack_used"
+	)
+
+	var (
+		metric       Metric
+		metricFamily dto.MetricFamily
+	)
+	decoder := expfmt.NewDecoder(mem.LimitReader(resp.Body, MaxResponeSize), expfmt.ResponseFormat(resp.Header))
+	for {
+		err := decoder.Decode(&metricFamily)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return Metric{}, err
+		}
+
+		if len(metricFamily.Metric) == 0 {
+			return Metric{}, errors.New("kes: server response contains no metric")
+		}
+		var (
+			name = metricFamily.GetName()
+			kind = metricFamily.GetType()
+		)
+		switch {
+		case kind == dto.MetricType_COUNTER && name == MetricRequestOK:
+			for _, m := range metricFamily.GetMetric() {
+				metric.RequestOK += uint64(m.GetCounter().GetValue())
+			}
+		case kind == dto.MetricType_COUNTER && name == MetricRequestErr:
+			for _, m := range metricFamily.GetMetric() {
+				metric.RequestErr += uint64(m.GetCounter().GetValue())
+			}
+		case kind == dto.MetricType_COUNTER && name == MetricRequestFail:
+			for _, m := range metricFamily.GetMetric() {
+				metric.RequestFail += uint64(m.GetCounter().GetValue())
+			}
+		default:
+			if len(metricFamily.Metric) != 1 {
+				return Metric{}, errors.New("kes: server response contains more than one metric")
+			}
+			rawMetric := metricFamily.GetMetric()[0] // Safe since we checked length before
+			switch {
+			case kind == dto.MetricType_GAUGE && name == MetricRequestActive:
+				metric.RequestActive = uint64(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_COUNTER && name == MetricAuditEvents:
+				metric.AuditEvents = uint64(rawMetric.GetCounter().GetValue())
+			case kind == dto.MetricType_COUNTER && name == MetricErrorEvents:
+				metric.ErrorEvents = uint64(rawMetric.GetCounter().GetValue())
+			case kind == dto.MetricType_HISTOGRAM && name == MetricResponseTime:
+				metric.LatencyHistogram = map[time.Duration]uint64{}
+				for _, bucket := range rawMetric.GetHistogram().GetBucket() {
+					if math.IsInf(bucket.GetUpperBound(), 0) { // Ignore the +Inf bucket
+						continue
+					}
+
+					duration := time.Duration(1000*bucket.GetUpperBound()) * time.Millisecond
+					metric.LatencyHistogram[duration] = bucket.GetCumulativeCount()
+				}
+				delete(metric.LatencyHistogram, 0) // Delete the artificial zero entry
+			case kind == dto.MetricType_GAUGE && name == MetricSystemUpTme:
+				metric.UpTime = time.Duration(rawMetric.GetGauge().GetValue()) * time.Second
+			case kind == dto.MetricType_GAUGE && name == MetricSystemCPUs:
+				metric.CPUs = int(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemUsableCPUs:
+				metric.UsableCPUs = int(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemThreads:
+				metric.Threads = int(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemHeapUsed:
+				metric.HeapAlloc = uint64(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemHeapObjects:
+				metric.HeapObjects = uint64(rawMetric.GetGauge().GetValue())
+			case kind == dto.MetricType_GAUGE && name == MetricSystemStackUsed:
+				metric.StackAlloc = uint64(rawMetric.GetGauge().GetValue())
+			}
+		}
+	}
+	return metric, nil
 }
 
 func (c *Client) initLoadBalancer() {
