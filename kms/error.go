@@ -48,7 +48,11 @@ var (
 
 	// ErrIdentityNotFound is returned when trying to access or delete a identity
 	// that does not exist.
-	ErrIdentityNotFound = Error{http.StatusNotFound, " does not exist"}
+	ErrIdentityNotFound = Error{http.StatusNotFound, "identity does not exist"}
+
+	// ErrDecrypt is returned when trying to decrypt an invalid or modified
+	// ciphertext or when the wrong key is used for decryption.
+	ErrDecrypt = Error{http.StatusBadRequest, "invalid ciphertext"}
 )
 
 // Error is a KMS API error.
