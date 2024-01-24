@@ -100,6 +100,10 @@ func (r *EditClusterRequest) UnmarshalPB(v *pb.EditClusterRequest) error {
 	return nil
 }
 
+// BackupDBRequest contains options for requesting a database backup from
+// a KMS server.
+type BackupDBRequest struct{}
+
 // CreateEnclaveRequest contains options for creating enclaves.
 type CreateEnclaveRequest struct {
 	// Name is the name of the enclave to create.

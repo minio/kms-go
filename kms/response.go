@@ -5,6 +5,8 @@
 package kms
 
 import (
+	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -284,6 +286,43 @@ func (s *ClusterStatusResponse) UnmarshalPB(v *pb.ClusterStatusResponse) error {
 		s.NodesDown[int(id)] = addr
 	}
 	return nil
+}
+
+// BackupDBResponse contains the database content received from a KMS server.
+type BackupDBResponse struct {
+	Body io.ReadCloser // The database content
+}
+
+// Read reads data from the response body into b.
+func (r *BackupDBResponse) Read(b []byte) (int, error) {
+	n, err := r.Body.Read(b)
+	if errors.Is(err, io.EOF) {
+		r.Body.Close()
+	}
+	return n, err
+}
+
+// Close closes the underlying response body.
+func (r *BackupDBResponse) Close() error {
+	return r.Body.Close()
+}
+
+// gzipReadCloser wraps a gzip.Reader. It's Close method
+// closes the underlying HTTP response body and the gzip
+// reader.
+type gzipReadCloser struct {
+	gzip   *gzip.Reader
+	closer io.Closer
+}
+
+func (r gzipReadCloser) Read(b []byte) (int, error) { return r.gzip.Read(b) }
+
+func (r gzipReadCloser) Close() error {
+	err := r.closer.Close()
+	if gzipErr := r.gzip.Close(); err == nil {
+		return gzipErr
+	}
+	return err
 }
 
 // DescribeEnclaveResponse contains information about an enclave.

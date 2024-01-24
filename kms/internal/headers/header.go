@@ -9,9 +9,10 @@ package headers
 const (
 	Accept           = "Accept"            // RFC 2616
 	Authorization    = "Authorization"     // RFC 2616
+	ETag             = "ETag"              // RFC 2616
 	ContentType      = "Content-Type"      // RFC 2616
 	ContentLength    = "Content-Length"    // RFC 2616
-	ETag             = "ETag"              // RFC 2616
+	ContentEncoding  = "Content-Encoding"  // RFC 2616 and 7231
 	TransferEncoding = "Transfer-Encoding" // RFC 2616
 )
 
@@ -38,4 +39,9 @@ const (
 	ContentTypeJSONLines = "application/x-ndjson"
 	ContentTypeText      = "text/plain"
 	ContentTypeHTML      = "text/html"
+)
+
+// Commonly used HTTP content encoding values.
+const (
+	ContentEncodingGZIP = "gzip"
 )

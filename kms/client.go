@@ -6,6 +6,7 @@ package kms
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
@@ -324,6 +325,53 @@ func (c *Client) RemoveNode(ctx context.Context, req *RemoveNodeRequest) error {
 	}
 	c.lb.Hosts = hosts
 	return nil
+}
+
+// BackupDB returns an io.ReadCloser containing a snapshot of the
+// current KMS server database state. The returned BackupDBResponse
+// must be closed by the caller.
+func (c *Client) BackupDB(ctx context.Context, _ *BackupDBRequest) (*BackupDBResponse, error) {
+	const (
+		Method   = http.MethodGet
+		Path     = api.PathClusterBackup
+		StatusOK = http.StatusOK
+	)
+
+	url, err := c.lb.URL(Path)
+	if err != nil {
+		return nil, err
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Add(headers.Accept, headers.ContentTypeAppAny)
+	r.Header.Add(headers.Accept, headers.ContentEncodingGZIP)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != StatusOK {
+		return nil, readError(resp)
+	}
+
+	// Decompress the response body if the HTTP client doesn't
+	// decompress automatically.
+	body := resp.Body
+	if resp.Header.Get(headers.ContentEncoding) == headers.ContentEncodingGZIP {
+		z, err := gzip.NewReader(body)
+		if err != nil {
+			return nil, err
+		}
+		body = gzipReadCloser{
+			gzip:   z,
+			closer: body,
+		}
+	}
+	return &BackupDBResponse{
+		Body: body,
+	}, nil
 }
 
 // CreateEnclave creates a new enclave with the name req.Name.
