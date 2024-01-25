@@ -45,13 +45,50 @@ type ListRequest struct {
 	Limit int
 }
 
-// NodeStatusRequest contains options for fetching status
-// information for one particular KMS cluster node.
-type NodeStatusRequest struct{}
+// VersionRequest contains options for fetching version
+// information for one or multiple KMS servers.
+type VersionRequest struct {
+	// List of endpoints from which version information
+	// is requested. If empty, the client requests version
+	// information from all known endpoints.
+	Hosts []string
+}
 
-// StatusRequest contains options for fetching KMS cluster
+// LivenessRequest contains options for checking whether
+// one or multiple KMS servers are alive.
+type LivenessRequest struct {
+	// List of endpoints for which the liveness state is
+	// checked. If empty, the client checks the liveness
+	// state on all known endpoints.
+	Hosts []string
+}
+
+// ReadinessRequest contains options for checking whether
+// one or multiple KMS servers are ready to serve requests.
+type ReadinessRequest struct {
+	// List of endpoints for which the readiness state is
+	// checked. If empty, the client checks the readiness
+	// state on all known endpoints.
+	Hosts []string
+
+	// Write, if true, checks whether the servers are
+	// ready to serve "write" requests that change the
+	// KMS state.
+	Write bool
+}
+
+// ServerStatusRequest contains options for fetching status
+// information for one particular KMS server.
+type ServerStatusRequest struct {
+	// List of endpoints from which status information
+	// is requested. If empty, the client requests status
+	// information from all known endpoints.
+	Hosts []string
+}
+
+// ClusterStatusRequest contains options for fetching KMS cluster
 // status information.
-type StatusRequest struct{}
+type ClusterStatusRequest struct{}
 
 // AddNodeRequest describes which KMS server to add to an existing.
 type AddNodeRequest struct {

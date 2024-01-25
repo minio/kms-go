@@ -6,7 +6,9 @@ package kms
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -101,4 +103,38 @@ func readError(resp *http.Response) Error {
 		return Error{Code: resp.StatusCode, Err: err.Error()}
 	}
 	return Error{Code: resp.StatusCode, Err: sb.String()}
+}
+
+// HostError captures an error returned by a host.
+// It implements the net.Error interface.
+type HostError struct {
+	Host string // The host for which an operation failed
+	Err  error  // The underlying error
+}
+
+var _ net.Error = (*HostError)(nil) // compiler check
+
+// Error returns the underlying error message prefixed by the host.
+func (e *HostError) Error() string { return fmt.Sprintf("%q: %s", e.Host, e.Err.Error()) }
+
+// Unwrap returns the underlying error.
+func (e *HostError) Unwrap() error { return e.Err }
+
+// Timeout reports whether the error s caused by a timeout.
+func (e *HostError) Timeout() bool {
+	t, ok := e.Err.(interface {
+		Timeout() bool
+	})
+	return ok && t.Timeout()
+}
+
+// Temporary reports whether the error is temporary.
+//
+// Deprecated: Temporary errors are not well-defined.
+// It is only there to satisfy the net.Error interface.
+func (e *HostError) Temporary() bool {
+	t, ok := e.Err.(interface {
+		Temporary() bool
+	})
+	return ok && t.Temporary()
 }

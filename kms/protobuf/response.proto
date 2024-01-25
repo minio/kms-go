@@ -33,10 +33,13 @@ message VersionResponse {
   // APIVersion is the API version supported by the KMS server.
   // For example, "v1".
   string APIVersion = 3 [ json_name="api_version" ];
+
+  // Addr is the KMS server address as 'host' or 'host:port'. 
+  string Addr = 4 [ json_name="address" ];
 }
 
 message ServerStatusResponse {
-  // Version is the version of the KMS server. It's the timestamp of
+    // Version is the version of the KMS server. It's the timestamp of
   // the latest commit formatted as 'yyyy-mm-ddThh-mm-ssZ'. For example,
   // "2023-12-01T16-06-52Z"
   string Version = 1 [ json_name="version" ];
@@ -45,37 +48,72 @@ message ServerStatusResponse {
   // For example, "v1".
   string APIVersion = 2 [ json_name="api_version" ];
 
-  // Addr is the KMS server address as 'host' or 'host:port'. 
+    // Addr is the KMS server address as 'host' or 'host:port'. 
   string Addr = 3 [ json_name="address" ];
+
+  // UpTime is the amount of time the KMS server is up and running.
+  google.protobuf.Duration UpTime = 4 [ json_name="uptime" ];
+
+  // OS identifies the operating system the KMS server is running on.
+  // For example, "linux" or "darwin". 
+  string OS = 5 [ json_name="sys_os" ];
+
+  // Arch is the CPU architecture of the KMS server. For example, "amd64".
+  string Arch = 6 [ json_name="sys_cpu_arch" ];
+
+  // CPUs is the number of logical CPUs that can execite the KMS server process.
+  // However, the KMS server may not use all of these CPUs. It might be limited
+  // to fewer CPUs.
+  uint32 CPUs = 7 [ json_name="sys_cpu_num" ];
+  
+  // UsableCPUs is the number of CPUs actually used by the KMS server process.
+  // Unless the KMS server has been limited to fewer CPUs, equal to CPUs field.
+  uint32 UsableCPUs = 8 [ json_name="sys_cpu_used" ];
+
+  // HeapMemInUse is the amount of heap memory currently occupied by the KMS server.
+  // The total amount of memory used by the KMS server process is HeapMemInUse +
+  // StackMemInUse.
+  uint64 HeapMemInUse = 9 [ json_name="sys_mem_heap_used" ];
+  
+  // StackMemInUse is the amount of stack memory currently occupied by the KMS server.
+  // The total amount of memory used by the KMS server process is HeapMemInUse +
+  // StackMemInUse.
+  uint64 StackMemInUse = 10 [ json_name="sys_mem_stack_used" ];
+}
+
+message NodeStatusResponse {
+  // Server contains status information about the server. For example version
+  // uptime and memory usage.
+  ServerStatusResponse Server = 1 [ json_name = "server" ];
 
   // Role is the current role the KMS server node has within the cluster.
   // Either, "Leader", "Follower" or "Candidate". 
-  string Role = 4 [ json_name="role" ];
+  string Role = 2 [ json_name="role" ];
 
   // Commit is the number of state changes applied to this KMS server.
-  uint64 Commit = 5 [ json_name="commit" ];
+  uint64 Commit = 3 [ json_name="commit" ];
 
   // Nodes is a list of KMS server nodes within the KMS cluster as a map
   // of node IDs to KMS server addresses of the form 'host' or 'host:port'. 
-  map<uint32,string> Nodes = 6 [ json_name="nodes" ];
+  map<uint32,string> Nodes = 4 [ json_name="nodes" ];
 
   // ID is the node ID of this KMS server. It only changes if the node
   // joins a cluster.
-  uint32 ID = 7 [ json_name="node_id" ];
+  uint32 ID = 5 [ json_name="node_id" ];
 
   // LeaderID is the ID of the current cluster leader or negative if
   // the cluster has no leader.
-  sint64 LeaderID = 8 [ json_name="leader_id" ];
+  sint64 LeaderID = 6 [ json_name="leader_id" ];
 
   // LastHeartbeat is the duration since the KMS server has sent or received
   // a heartbeat. As long as there is a cluster leader, it should be lower
   // than the ElectionTimeout.
-  google.protobuf.Duration LastHeartbeat = 9 [ json_name="last_heartbeat" ];
+  google.protobuf.Duration LastHeartbeat = 7 [ json_name="last_heartbeat" ];
   
   // HeartbeatInterval defines the frequency in which this KMS server, as cluster
   // leader, sends heartbeats to its follower nodes. All nodes within a cluster
   // should use the same heartbeat interval.
-  google.protobuf.Duration HeartbeatInterval = 10 [ json_name="heartbeat_interval" ];
+  google.protobuf.Duration HeartbeatInterval = 8 [ json_name="heartbeat_interval" ];
 
   // ElectionTimeout defines how long a KMS server node waits for heartbeats before
   // it considers the cluster leaders as down and starts a leader election to become
@@ -85,41 +123,12 @@ message ServerStatusResponse {
   // or base election timeout of all cluster nodes should be balanced with the
   // HeartbeatInterval to prevent nodes from starting elections even though a leader
   // is present. A reasonable default may be ElectionTimeout = 3 * HeartbeatInterval.
-  google.protobuf.Duration ElectionTimeout = 11 [ json_name="election_timeout" ]; 
-
-  // UpTime is the amount of time the KMS server is up and running.
-  google.protobuf.Duration UpTime = 12 [ json_name="sys_uptime" ];
-
-  // OS identifies the operating system the KMS server is running on.
-  // For example, "linux" or "darwin". 
-  string OS = 13 [ json_name="sys_os" ];
-
-  // Arch is the CPU architecture of the KMS server. For example, "amd64".
-  string Arch = 14 [ json_name="sys_cpu_arch" ];
-
-  // CPUs is the number of logical CPUs that can execite the KMS server process.
-  // However, the KMS server may not use all of these CPUs. It might be limited
-  // to fewer CPUs.
-  uint32 CPUs = 15 [ json_name="sys_cpu_num" ];
-
-  // UsableCPUs is the number of CPUs actually used by the KMS server process.
-  // Unless the KMS server has been limited to fewer CPUs, equal to CPUs field.
-  uint32 UsableCPUs = 16 [ json_name="sys_cpu_used" ];
-
-  // HeapMemInUse is the amount of heap memory currently occupied by the KMS server.
-  // The total amount of memory used by the KMS server process is HeapMemInUse +
-  // StackMemInUse.
-  uint64 HeapMemInUse = 17 [ json_name="sys_mem_heap_used" ];
-  
-  // StackMemInUse is the amount of stack memory currently occupied by the KMS server.
-  // The total amount of memory used by the KMS server process is HeapMemInUse +
-  // StackMemInUse.
-  uint64 StackMemInUse = 18 [ json_name="sys_mem_stack_used" ];
+  google.protobuf.Duration ElectionTimeout = 9 [ json_name="election_timeout" ]; 
 }
 
 message ClusterStatusResponse {
-  map<uint32,ServerStatusResponse> nodesUp = 1 [ json_name="nodes_up" ];
-  map<uint32,string> nodesDown = 2 [ json_name="nodes_down" ];
+  map<uint32,NodeStatusResponse> NodesUp = 1 [ json_name="nodes_up" ];
+  map<uint32,string> NodesDown = 2 [ json_name="nodes_down" ];
 }
 
 message DescribeEnclaveResponse {

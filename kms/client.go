@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/minio/kms-go/kms/internal/api"
@@ -122,47 +123,346 @@ type Client struct {
 	lb     *https.LoadBalancer
 }
 
-// ServerStatus returns the status of the KMS node at the given endpoint.
-// For status information about the entire KMS cluster use Status.
-func (c *Client) ServerStatus(ctx context.Context, endpoint string, _ *NodeStatusRequest) (*ServerStatusResponse, error) {
+// Version returns version information from one or multiple KMS servers.
+// If req.Hosts is empty, the Client tries to fetch version information
+// from all its hosts.
+//
+// For a single host, Version returns its version information and the
+// first error encountered, if any.
+//
+// For multiple hosts, Version returns a list of version responses. If
+// it fails to fetch version information from some hosts, it returns a
+// joined error that implements the "Unwrap() []error" interface. Each
+// of these errors are of type HostError.
+func (c *Client) Version(ctx context.Context, req *VersionRequest) ([]*VersionResponse, error) {
 	const (
 		Method      = http.MethodGet
-		Path        = api.PathStatus
+		Path        = api.PathVersion
 		StatusOK    = http.StatusOK
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
+	version := func(ctx context.Context, endpoint string) (*VersionResponse, error) {
+		url, err := url.JoinPath(httpsURL(endpoint), Path)
+		if err != nil {
+			return nil, err
+		}
+		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set(headers.Accept, ContentType)
 
-	url, err := url.JoinPath(httpsURL(endpoint), Path)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, Method, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set(headers.Accept, ContentType)
+		resp, err := c.direct.Do(r)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
 
-	resp, err := c.direct.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+		if resp.StatusCode != StatusOK {
+			return nil, readError(resp)
+		}
 
-	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		var data VersionResponse
+		if err := readResponse(resp, &data); err != nil {
+			return nil, err
+		}
+		return &data, nil
 	}
 
-	var data ServerStatusResponse
-	if err := readResponse(resp, &data); err != nil {
-		return nil, err
+	endpoints := req.Hosts
+	if len(endpoints) == 0 {
+		endpoints = c.lb.Hosts
 	}
-	return &data, nil
+	if len(endpoints) == 1 {
+		resp, err := version(ctx, endpoints[0])
+		if err != nil {
+			return []*VersionResponse{}, err
+		}
+		return []*VersionResponse{resp}, nil
+	}
+
+	resps := make([]*VersionResponse, len(endpoints))
+	errs := make([]error, len(endpoints))
+
+	var wg sync.WaitGroup
+	for i := range endpoints {
+		wg.Add(1)
+
+		go func(i int) {
+			defer wg.Done()
+
+			resp, err := version(ctx, endpoints[i])
+			resps[i] = resp
+			if err != nil {
+				errs[i] = &HostError{
+					Host: endpoints[i],
+					Err:  err,
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Compact responses by filtering all nil values without alloc.
+	responses := resps[:0]
+	for _, r := range resps {
+		if r != nil {
+			responses = append(responses, r)
+		}
+	}
+	return responses[:len(responses):len(responses)], errors.Join(errs...)
+}
+
+// ServerStatus returns status information for one or multiple KMS servers.
+// If req.Hosts is empty, the Client tries to fetch status information
+// from all its hosts.
+//
+// For a single host, ServerStatus returns its status information and the
+// first error encountered, if any.
+//
+// For multiple hosts, ServerStatus returns a list of version responses.
+// If it fails to fetch status information from some hosts, it returns a
+// joined error that implements the "Unwrap() []error" interface. Each
+// of these errors are of type HostError.
+func (c *Client) ServerStatus(ctx context.Context, req *ServerStatusRequest) ([]*ServerStatusResponse, error) {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathHealthStatus
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+	status := func(ctx context.Context, endpoint string) (*ServerStatusResponse, error) {
+		url, err := url.JoinPath(httpsURL(endpoint), Path)
+		if err != nil {
+			return nil, err
+		}
+		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set(headers.Accept, ContentType)
+
+		resp, err := c.direct.Do(r)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != StatusOK {
+			return nil, readError(resp)
+		}
+
+		var data ServerStatusResponse
+		if err := readResponse(resp, &data); err != nil {
+			return nil, err
+		}
+		return &data, nil
+	}
+
+	endpoints := req.Hosts
+	if len(endpoints) == 0 {
+		endpoints = c.lb.Hosts
+	}
+	if len(endpoints) == 1 {
+		resp, err := status(ctx, endpoints[0])
+		if err != nil {
+			return []*ServerStatusResponse{}, err
+		}
+		return []*ServerStatusResponse{resp}, nil
+	}
+
+	resps := make([]*ServerStatusResponse, len(endpoints))
+	errs := make([]error, len(endpoints))
+
+	var wg sync.WaitGroup
+	for i := range endpoints {
+		wg.Add(1)
+
+		go func(i int) {
+			defer wg.Done()
+
+			resp, err := status(ctx, endpoints[i])
+			if err == nil {
+				resp.Host = endpoints[i]
+				resps[i] = resp
+			} else {
+				errs[i] = &HostError{
+					Host: endpoints[i],
+					Err:  err,
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Compact responses by filtering all nil values without alloc.
+	responses := resps[:0]
+	for _, r := range resps {
+		if r != nil {
+			responses = append(responses, r)
+		}
+	}
+	return responses[:len(responses):len(responses)], errors.Join(errs...)
+}
+
+// Live reports whether one or multiple KMS servers are alive. If
+// req.Hosts is empty, the Client checks the liveness of all hosts.
+//
+// The liveness probe just reports whether the KMS servers are listening
+// and responding to requests at all. It does not report whether the
+// servers are ready to handle requests. Use the Ready method for checking
+// the servers ability to handle read or write requests.
+//
+// For a single host, Live returns a nil error if the host is alive.
+//
+// For multiple hosts, Live only returns a nil error if all hosts are
+// alive. If some nodes are not alive, it returns a joined error that
+// implements the "Unwrap() []error" interface. Each of these errors
+// are of type HostError.
+func (c *Client) Live(ctx context.Context, req *LivenessRequest) error {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathHealthLive
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+	live := func(ctx context.Context, endpoint string) error {
+		url, err := url.JoinPath(httpsURL(endpoint), Path)
+		if err != nil {
+			return err
+		}
+		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+		if err != nil {
+			return err
+		}
+		r.Header.Set(headers.Accept, ContentType)
+
+		resp, err := c.direct.Do(r)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != StatusOK {
+			return readError(resp)
+		}
+		return nil
+	}
+
+	endpoints := req.Hosts
+	if len(endpoints) == 0 {
+		endpoints = c.lb.Hosts
+	}
+	if len(endpoints) == 1 {
+		return live(ctx, endpoints[0])
+	}
+
+	errs := make([]error, len(endpoints))
+	var wg sync.WaitGroup
+	for i := range endpoints {
+		wg.Add(1)
+
+		go func(i int) {
+			defer wg.Done()
+
+			if err := live(ctx, endpoints[i]); err != nil {
+				errs[i] = &HostError{
+					Host: endpoints[i],
+					Err:  err,
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	return errors.Join(errs...)
+}
+
+// Ready reports whether one or multiple KMS servers are ready to
+// serve requests. If req.Hosts is empty, the Client checks the
+// readiness of all hosts.
+//
+// By default, the readiness probe reports whether the servers are
+// ready to serve "read" requests. Most KMS API operations, including
+// en/decryption, signing or data key generation, are considered read
+// requests.
+// For checking the readiness for handling write requests, like key
+// creation or deletion, set req.Write to true.
+//
+// For a single host, Ready returns a nil error if the host is ready
+// to serve requests.
+//
+// For multiple hosts, Ready only returns a nil error if all hosts are
+// ready. If some nodes are not ready, it returns a joined error that
+// implements the "Unwrap() []error" interface. Each of these errors
+// are of type HostError.
+func (c *Client) Ready(ctx context.Context, req *ReadinessRequest) error {
+	const (
+		Method      = http.MethodGet
+		Path        = api.PathHealthReady
+		StatusOK    = http.StatusOK
+		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
+	)
+	ready := func(ctx context.Context, endpoint string) error {
+		url, err := url.JoinPath(httpsURL(endpoint), Path)
+		if err != nil {
+			return err
+		}
+		if req.Write {
+			url += "?" + api.QueryReadyWrite
+		}
+
+		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+		if err != nil {
+			return err
+		}
+		r.Header.Set(headers.Accept, ContentType)
+
+		resp, err := c.direct.Do(r)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != StatusOK {
+			return readError(resp)
+		}
+		return nil
+	}
+
+	endpoints := req.Hosts
+	if len(endpoints) == 0 {
+		endpoints = c.lb.Hosts
+	}
+	if len(endpoints) == 1 {
+		return ready(ctx, endpoints[0])
+	}
+
+	errs := make([]error, len(endpoints))
+	var wg sync.WaitGroup
+	for i := range endpoints {
+		wg.Add(1)
+
+		go func(i int) {
+			defer wg.Done()
+
+			if err := ready(ctx, endpoints[i]); err != nil {
+				errs[i] = &HostError{
+					Host: endpoints[i],
+					Err:  err,
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	return errors.Join(errs...)
 }
 
 // ClusterStatus returns status information about the entire KMS cluster.
 // The returned ClusterStatusResponse contains status information for all
-// nodes within the cluster.
-func (c *Client) ClusterStatus(ctx context.Context, _ *StatusRequest) (*ClusterStatusResponse, error) {
+// nodes within the cluster. It requires SysAdmin privileges.
+func (c *Client) ClusterStatus(ctx context.Context, _ *ClusterStatusRequest) (*ClusterStatusResponse, error) {
 	const (
 		Method      = http.MethodGet
 		Path        = api.PathClusterStatus
@@ -210,6 +510,8 @@ func (c *Client) ClusterStatus(ctx context.Context, _ *StatusRequest) (*ClusterS
 // Applications should make sure that the server node is available
 // before editing its cluster definition. Refer to ServerStatus or
 // ClusterStatus.
+//
+// It requires SysAdmin privileges.
 func (c *Client) EditCluster(ctx context.Context, req *EditClusterRequest) error {
 	const (
 		Method      = http.MethodPatch
@@ -255,6 +557,8 @@ func (c *Client) EditCluster(ctx context.Context, req *EditClusterRequest) error
 // Nodes can only join a cluster if the cluster has a leader. The KMS
 // server at req.Host must be fresh in the sense that it must not be
 // part of a multi-node cluster already.
+//
+// It requires SysAdmin privileges.
 func (c *Client) AddNode(ctx context.Context, req *AddNodeRequest) error {
 	const (
 		Method      = http.MethodPatch
@@ -289,6 +593,8 @@ func (c *Client) AddNode(ctx context.Context, req *AddNodeRequest) error {
 
 // RemoveNode removes the KMS server at req.Host from the current KMS
 // cluster. It returns an error if the server is not part of the cluster.
+//
+// It requires SysAdmin privileges.
 func (c *Client) RemoveNode(ctx context.Context, req *RemoveNodeRequest) error {
 	const (
 		Method      = http.MethodPatch
@@ -330,6 +636,8 @@ func (c *Client) RemoveNode(ctx context.Context, req *RemoveNodeRequest) error {
 // BackupDB returns an io.ReadCloser containing a snapshot of the
 // current KMS server database state. The returned BackupDBResponse
 // must be closed by the caller.
+//
+// It requires SysAdmin privileges.
 func (c *Client) BackupDB(ctx context.Context, _ *BackupDBRequest) (*BackupDBResponse, error) {
 	const (
 		Method   = http.MethodGet
@@ -377,6 +685,7 @@ func (c *Client) BackupDB(ctx context.Context, _ *BackupDBRequest) (*BackupDBRes
 // CreateEnclave creates a new enclave with the name req.Name.
 //
 // It returns ErrEnclaveExists if such an enclave already exists.
+// It requires SysAdmin privileges.
 func (c *Client) CreateEnclave(ctx context.Context, req *CreateEnclaveRequest) error {
 	const (
 		Method      = http.MethodPut
@@ -411,6 +720,7 @@ func (c *Client) CreateEnclave(ctx context.Context, req *CreateEnclaveRequest) e
 // the name req.Name.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists.
+// It requires SysAdmin privileges.
 func (c *Client) DescribeEnclave(ctx context.Context, req *DescribeEnclaveRequest) (*DescribeEnclaveResponse, error) {
 	const (
 		Method      = http.MethodGet
@@ -449,6 +759,7 @@ func (c *Client) DescribeEnclave(ctx context.Context, req *DescribeEnclaveReques
 // DeleteEnclave deletes the enclave with the name req.Name.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists.
+// It requires SysAdmin privileges.
 func (c *Client) DeleteEnclave(ctx context.Context, req *DeleteEnclaveRequest) error {
 	const (
 		Method      = http.MethodDelete
@@ -485,6 +796,8 @@ func (c *Client) DeleteEnclave(ctx context.Context, req *DeleteEnclaveRequest) e
 //
 // ListEnclaves implements paginated listing. For iterating over a stream
 // of enclaves combine it with an Iter.
+//
+// It requires SysAdmin privileges.
 func (c *Client) ListEnclaves(ctx context.Context, req *ListRequest) (*Page[DescribeEnclaveResponse], error) {
 	const (
 		Method      = http.MethodGet

@@ -81,12 +81,17 @@ type VersionResponse struct {
 	// APIVersion is the API version supported by the KMS server.
 	// For example, "v1".
 	APIVersion string
+
+	// Host is the KMS server endpoint as 'host' or 'host:port'.
+	Host string
 }
 
 // MarshalPB converts the VersionResponse into its protobuf representation.
 func (r *VersionResponse) MarshalPB(v *pb.VersionResponse) error {
 	v.Version = r.Version
 	v.Commit = r.Commit
+	v.APIVersion = r.APIVersion
+	v.Addr = r.Host
 	return nil
 }
 
@@ -94,11 +99,13 @@ func (r *VersionResponse) MarshalPB(v *pb.VersionResponse) error {
 func (r *VersionResponse) UnmarshalPB(v *pb.VersionResponse) error {
 	r.Version = v.Version
 	r.Commit = v.Commit
+	r.APIVersion = v.APIVersion
+	r.Host = v.Addr
 	return nil
 }
 
 // ServerStatusResponse contains status information about a single
-// KMS cluster node.
+// KMS server.
 type ServerStatusResponse struct {
 	// Version is the version of the KMS server. It's the timestamp of
 	// the latest commit formatted as 'yyyy-mm-ddThh-mm-ssZ'. For example,
@@ -109,8 +116,77 @@ type ServerStatusResponse struct {
 	// For example, "v1".
 	APIVersion string
 
-	// Endpoint is the KMS server endpoint as 'host' or 'host:port'.
-	Endpoint string
+	// Host is the KMS server endpoint as 'host' or 'host:port'.
+	Host string
+
+	// UpTime is the amount of time the KMS server is up and running.
+	UpTime time.Duration
+
+	// OS identifies the operating system the KMS server is running on.
+	// For example, "linux" or "darwin".
+	OS string
+
+	// CPUArch is the CPU architecture of the KMS server. For example, "amd64".
+	CPUArch string
+
+	// CPUs is the number of logical CPUs that can execite the KMS server process.
+	// However, the KMS server may not use all of these CPUs. It might be limited
+	// to fewer CPUs.
+	CPUs uint
+
+	// UsableCPUs is the number of CPUs actually used by the KMS server process.
+	// Unless the KMS server has been limited to fewer CPUs, equal to CPUs field.
+	UsableCPUs uint
+
+	// HeapMemInUse is the amount of heap memory currently occupied by the KMS server.
+	// The total amount of memory used by the KMS server process is HeapMemInUse +
+	// StackMemInUse.
+	HeapMemInUse uint64
+
+	// StackMemInUse is the amount of stack memory currently occupied by the KMS server.
+	// The total amount of memory used by the KMS server process is HeapMemInUse +
+	// StackMemInUse.
+	StackMemInUse uint64
+}
+
+// MarshalPB converts the ServerStatusResponse into its protobuf representation.
+func (s *ServerStatusResponse) MarshalPB(v *pb.ServerStatusResponse) error {
+	v.Version = s.Version
+	v.APIVersion = s.APIVersion
+	v.Addr = s.Host
+	v.UpTime = pb.Duration(s.UpTime)
+	v.OS = s.OS
+	v.Arch = s.CPUArch
+	v.CPUs = uint32(s.CPUs)
+	v.UsableCPUs = uint32(s.UsableCPUs)
+	v.HeapMemInUse = s.HeapMemInUse
+	v.StackMemInUse = s.StackMemInUse
+	return nil
+}
+
+// UnmarshalPB initializes the ServerStatusResponse from its protobuf representation.
+func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
+	s.Version = v.Version
+	s.APIVersion = v.APIVersion
+	s.Host = v.Addr
+	s.UpTime = v.UpTime.AsDuration()
+	s.OS = v.OS
+	s.CPUArch = v.Arch
+	s.CPUs = uint(v.CPUs)
+	s.UsableCPUs = uint(v.UsableCPUs)
+	s.HeapMemInUse = v.HeapMemInUse
+	s.StackMemInUse = v.StackMemInUse
+	return nil
+}
+
+// NodeStatusResponse contains status information about a single
+// KMS cluster node within a ClusterStatusResponse.
+//
+// KMS servers don't expose the node status directly. Refer to
+// the ServerStatusResponse type for fetching status information
+// for a particular server.
+type NodeStatusResponse struct {
+	Server ServerStatusResponse
 
 	// Role is the current role the KMS server node has within the cluster.
 	// Either, "Leader", "Follower" or "Candidate".
@@ -153,42 +229,14 @@ type ServerStatusResponse struct {
 	//
 	//   ElectionTimeout = 3 * HeartbeatInterval.
 	ElectionTimeout time.Duration
-
-	// UpTime is the amount of time the KMS server is up and running.
-	UpTime time.Duration
-
-	// OS identifies the operating system the KMS server is running on.
-	// For example, "linux" or "darwin".
-	OS string
-
-	// CPUArch is the CPU architecture of the KMS server. For example, "amd64".
-	CPUArch string
-
-	// CPUs is the number of logical CPUs that can execite the KMS server process.
-	// However, the KMS server may not use all of these CPUs. It might be limited
-	// to fewer CPUs.
-	CPUs uint
-
-	// UsableCPUs is the number of CPUs actually used by the KMS server process.
-	// Unless the KMS server has been limited to fewer CPUs, equal to CPUs field.
-	UsableCPUs uint
-
-	// HeapMemInUse is the amount of heap memory currently occupied by the KMS server.
-	// The total amount of memory used by the KMS server process is HeapMemInUse +
-	// StackMemInUse.
-	HeapMemInUse uint64
-
-	// StackMemInUse is the amount of stack memory currently occupied by the KMS server.
-	// The total amount of memory used by the KMS server process is HeapMemInUse +
-	// StackMemInUse.
-	StackMemInUse uint64
 }
 
-// MarshalPB converts the ServerStatusResponse into its protobuf representation.
-func (s *ServerStatusResponse) MarshalPB(v *pb.ServerStatusResponse) error {
-	v.Version = s.Version
-	v.APIVersion = s.APIVersion
-	v.Addr = s.Endpoint
+// MarshalPB converts the NodeStatusResponse into its protobuf representation.
+func (s *NodeStatusResponse) MarshalPB(v *pb.NodeStatusResponse) error {
+	if err := s.Server.MarshalPB(v.Server); err != nil {
+		return err
+	}
+
 	v.Role = s.Role
 	v.Commit = s.Commit
 	v.Nodes = make(map[uint32]string, len(s.Nodes))
@@ -200,21 +248,15 @@ func (s *ServerStatusResponse) MarshalPB(v *pb.ServerStatusResponse) error {
 	v.LastHeartbeat = pb.Duration(s.LastHeartbeat)
 	v.HeartbeatInterval = pb.Duration(s.HeartbeatInterval)
 	v.ElectionTimeout = pb.Duration(s.ElectionTimeout)
-	v.UpTime = pb.Duration(s.UpTime)
-	v.OS = s.OS
-	v.Arch = s.CPUArch
-	v.CPUs = uint32(s.CPUs)
-	v.UsableCPUs = uint32(s.UsableCPUs)
-	v.HeapMemInUse = s.HeapMemInUse
-	v.StackMemInUse = s.StackMemInUse
 	return nil
 }
 
-// UnmarshalPB initializes the ServerStatusResponse from its protobuf representation.
-func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
-	s.Version = v.Version
-	s.APIVersion = v.APIVersion
-	s.Endpoint = v.Addr
+// UnmarshalPB initializes the NodeStatusResponse from its protobuf representation.
+func (s *NodeStatusResponse) UnmarshalPB(v *pb.NodeStatusResponse) error {
+	if err := s.Server.UnmarshalPB(v.Server); err != nil {
+		return err
+	}
+
 	s.Role = v.Role
 	s.Commit = v.Commit
 	s.Nodes = make(map[int]string, len(v.Nodes))
@@ -226,13 +268,6 @@ func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
 	s.LastHeartbeat = v.LastHeartbeat.AsDuration()
 	s.HeartbeatInterval = v.HeartbeatInterval.AsDuration()
 	s.ElectionTimeout = v.ElectionTimeout.AsDuration()
-	s.UpTime = v.UpTime.AsDuration()
-	s.OS = v.OS
-	s.CPUArch = v.Arch
-	s.CPUs = uint(v.CPUs)
-	s.UsableCPUs = uint(v.UsableCPUs)
-	s.HeapMemInUse = v.HeapMemInUse
-	s.StackMemInUse = v.StackMemInUse
 	return nil
 }
 
@@ -245,7 +280,7 @@ func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
 type ClusterStatusResponse struct {
 	// NodesUp is a map of node IDs to the corresponding node status
 	// information.
-	NodesUp map[int]*ServerStatusResponse
+	NodesUp map[int]*NodeStatusResponse
 
 	// NodesDown is a map of node IDs to node addresses containing
 	// all nodes that were not reachable or failed to respond in time.
@@ -254,9 +289,9 @@ type ClusterStatusResponse struct {
 
 // MarshalPB converts the ClusterStatusResponse into its protobuf representation.
 func (s *ClusterStatusResponse) MarshalPB(v *pb.ClusterStatusResponse) error {
-	v.NodesUp = make(map[uint32]*pb.ServerStatusResponse, len(s.NodesUp))
+	v.NodesUp = make(map[uint32]*pb.NodeStatusResponse, len(s.NodesUp))
 	for id, resp := range s.NodesUp {
-		stat := new(pb.ServerStatusResponse)
+		stat := new(pb.NodeStatusResponse)
 		if err := resp.MarshalPB(stat); err != nil {
 			return err
 		}
@@ -272,9 +307,9 @@ func (s *ClusterStatusResponse) MarshalPB(v *pb.ClusterStatusResponse) error {
 
 // UnmarshalPB initializes the ClusterStatusResponse from its protobuf representation.
 func (s *ClusterStatusResponse) UnmarshalPB(v *pb.ClusterStatusResponse) error {
-	s.NodesUp = make(map[int]*ServerStatusResponse, len(v.NodesUp))
+	s.NodesUp = make(map[int]*NodeStatusResponse, len(v.NodesUp))
 	for id, resp := range v.NodesUp {
-		stat := new(ServerStatusResponse)
+		stat := new(NodeStatusResponse)
 		if err := stat.UnmarshalPB(resp); err != nil {
 			return err
 		}
