@@ -6,6 +6,7 @@ package kms
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -103,6 +104,63 @@ func readError(resp *http.Response) Error {
 		return Error{Code: resp.StatusCode, Err: err.Error()}
 	}
 	return Error{Code: resp.StatusCode, Err: sb.String()}
+}
+
+// AsHostError returns the first error in err's tree, using errors.As,
+// that is of type *HostError. Otherwise, it returns nil.
+func AsHostError(err error) *HostError {
+	var hostErr *HostError
+	if errors.As(err, &hostErr) {
+		return hostErr
+	}
+	return nil
+}
+
+// UnwrapHostErrors returns a list of all HostError within err's tree.
+// If err is nil or err's tree contains no HostError it returns nil.
+//
+// The tree consists of err itself, followed by the errors obtained by
+// repeatedly calling errors.Unwrap. When err wraps multiple errors,
+// UnwrapHostErrors examines err followed by a depth-first traversal
+// of its children.
+func UnwrapHostErrors(err error) []*HostError {
+	if err == nil {
+		return nil
+	}
+
+	for {
+		switch x := err.(type) {
+		case *HostError:
+			return []*HostError{x}
+		case interface{ Unwrap() error }:
+			if err = x.Unwrap(); err == nil {
+				return nil
+			}
+		case interface{ Unwrap() []error }:
+			var hostErrors []*HostError
+			for _, err := range x.Unwrap() {
+				if h, ok := err.(*HostError); ok {
+					hostErrors = append(hostErrors, h)
+				}
+				if h := UnwrapHostErrors(err); h != nil {
+					hostErrors = append(hostErrors, h...)
+				}
+			}
+			return hostErrors
+		default:
+			return nil
+		}
+	}
+}
+
+func hostError(host string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &HostError{
+		Host: host,
+		Err:  err,
+	}
 }
 
 // HostError captures an error returned by a host.

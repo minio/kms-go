@@ -127,8 +127,8 @@ type Client struct {
 // If req.Hosts is empty, the Client tries to fetch version information
 // from all its hosts.
 //
-// For a single host, Version returns its version information and the
-// first error encountered, if any.
+// For a single host, Version returns its version information and a
+// HostError wrapping the first error encountered, if any.
 //
 // For multiple hosts, Version returns a list of version responses. If
 // it fails to fetch version information from some hosts, it returns a
@@ -144,27 +144,27 @@ func (c *Client) Version(ctx context.Context, req *VersionRequest) ([]*VersionRe
 	version := func(ctx context.Context, endpoint string) (*VersionResponse, error) {
 		url, err := url.JoinPath(httpsURL(endpoint), Path)
 		if err != nil {
-			return nil, err
+			return nil, hostError(endpoint, err)
 		}
 		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 		if err != nil {
-			return nil, err
+			return nil, hostError(endpoint, err)
 		}
 		r.Header.Set(headers.Accept, ContentType)
 
 		resp, err := c.direct.Do(r)
 		if err != nil {
-			return nil, err
+			return nil, hostError(endpoint, err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != StatusOK {
-			return nil, readError(resp)
+			return nil, hostError(endpoint, readError(resp))
 		}
 
 		var data VersionResponse
 		if err := readResponse(resp, &data); err != nil {
-			return nil, err
+			return nil, hostError(endpoint, err)
 		}
 		return &data, nil
 	}
@@ -190,15 +190,7 @@ func (c *Client) Version(ctx context.Context, req *VersionRequest) ([]*VersionRe
 
 		go func(i int) {
 			defer wg.Done()
-
-			resp, err := version(ctx, endpoints[i])
-			resps[i] = resp
-			if err != nil {
-				errs[i] = &HostError{
-					Host: endpoints[i],
-					Err:  err,
-				}
-			}
+			resps[i], errs[i] = version(ctx, endpoints[i])
 		}(i)
 	}
 	wg.Wait()
@@ -217,8 +209,8 @@ func (c *Client) Version(ctx context.Context, req *VersionRequest) ([]*VersionRe
 // If req.Hosts is empty, the Client tries to fetch status information
 // from all its hosts.
 //
-// For a single host, ServerStatus returns its status information and the
-// first error encountered, if any.
+// For a single host, ServerStatus returns its status information and a
+// HostError wrapping the first error encountered, if any.
 //
 // For multiple hosts, ServerStatus returns a list of version responses.
 // If it fails to fetch status information from some hosts, it returns a
@@ -234,27 +226,27 @@ func (c *Client) ServerStatus(ctx context.Context, req *ServerStatusRequest) ([]
 	status := func(ctx context.Context, endpoint string) (*ServerStatusResponse, error) {
 		url, err := url.JoinPath(httpsURL(endpoint), Path)
 		if err != nil {
-			return nil, err
+			return nil, hostError(endpoint, err)
 		}
 		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 		if err != nil {
-			return nil, err
+			return nil, hostError(endpoint, err)
 		}
 		r.Header.Set(headers.Accept, ContentType)
 
 		resp, err := c.direct.Do(r)
 		if err != nil {
-			return nil, err
+			return nil, hostError(endpoint, err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != StatusOK {
-			return nil, readError(resp)
+			return nil, hostError(endpoint, readError(resp))
 		}
 
 		var data ServerStatusResponse
 		if err := readResponse(resp, &data); err != nil {
-			return nil, err
+			return nil, hostError(endpoint, err)
 		}
 		return &data, nil
 	}
@@ -280,17 +272,7 @@ func (c *Client) ServerStatus(ctx context.Context, req *ServerStatusRequest) ([]
 
 		go func(i int) {
 			defer wg.Done()
-
-			resp, err := status(ctx, endpoints[i])
-			if err == nil {
-				resp.Host = endpoints[i]
-				resps[i] = resp
-			} else {
-				errs[i] = &HostError{
-					Host: endpoints[i],
-					Err:  err,
-				}
-			}
+			resps[i], errs[i] = status(ctx, endpoints[i])
 		}(i)
 	}
 	wg.Wait()
@@ -313,7 +295,8 @@ func (c *Client) ServerStatus(ctx context.Context, req *ServerStatusRequest) ([]
 // servers are ready to handle requests. Use the Ready method for checking
 // the servers ability to handle read or write requests.
 //
-// For a single host, Live returns a nil error if the host is alive.
+// For a single host, Live returns a nil error if the host is alive or
+// a HostError wrapping the encountered error.
 //
 // For multiple hosts, Live only returns a nil error if all hosts are
 // alive. If some nodes are not alive, it returns a joined error that
@@ -329,22 +312,22 @@ func (c *Client) Live(ctx context.Context, req *LivenessRequest) error {
 	live := func(ctx context.Context, endpoint string) error {
 		url, err := url.JoinPath(httpsURL(endpoint), Path)
 		if err != nil {
-			return err
+			return hostError(endpoint, err)
 		}
 		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 		if err != nil {
-			return err
+			return hostError(endpoint, err)
 		}
 		r.Header.Set(headers.Accept, ContentType)
 
 		resp, err := c.direct.Do(r)
 		if err != nil {
-			return err
+			return hostError(endpoint, err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != StatusOK {
-			return readError(resp)
+			return hostError(endpoint, readError(resp))
 		}
 		return nil
 	}
@@ -364,13 +347,7 @@ func (c *Client) Live(ctx context.Context, req *LivenessRequest) error {
 
 		go func(i int) {
 			defer wg.Done()
-
-			if err := live(ctx, endpoints[i]); err != nil {
-				errs[i] = &HostError{
-					Host: endpoints[i],
-					Err:  err,
-				}
-			}
+			errs[i] = live(ctx, endpoints[i])
 		}(i)
 	}
 	wg.Wait()
@@ -390,7 +367,7 @@ func (c *Client) Live(ctx context.Context, req *LivenessRequest) error {
 // creation or deletion, set req.Write to true.
 //
 // For a single host, Ready returns a nil error if the host is ready
-// to serve requests.
+// to serve requests or a HostError wrapping the encountered error.
 //
 // For multiple hosts, Ready only returns a nil error if all hosts are
 // ready. If some nodes are not ready, it returns a joined error that
@@ -406,7 +383,7 @@ func (c *Client) Ready(ctx context.Context, req *ReadinessRequest) error {
 	ready := func(ctx context.Context, endpoint string) error {
 		url, err := url.JoinPath(httpsURL(endpoint), Path)
 		if err != nil {
-			return err
+			return hostError(endpoint, err)
 		}
 		if req.Write {
 			url += "?" + api.QueryReadyWrite
@@ -414,18 +391,18 @@ func (c *Client) Ready(ctx context.Context, req *ReadinessRequest) error {
 
 		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 		if err != nil {
-			return err
+			return hostError(endpoint, err)
 		}
 		r.Header.Set(headers.Accept, ContentType)
 
 		resp, err := c.direct.Do(r)
 		if err != nil {
-			return err
+			return hostError(endpoint, err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != StatusOK {
-			return readError(resp)
+			return hostError(endpoint, readError(resp))
 		}
 		return nil
 	}
@@ -445,13 +422,7 @@ func (c *Client) Ready(ctx context.Context, req *ReadinessRequest) error {
 
 		go func(i int) {
 			defer wg.Done()
-
-			if err := ready(ctx, endpoints[i]); err != nil {
-				errs[i] = &HostError{
-					Host: endpoints[i],
-					Err:  err,
-				}
-			}
+			errs[i] = ready(ctx, endpoints[i])
 		}(i)
 	}
 	wg.Wait()
@@ -462,6 +433,8 @@ func (c *Client) Ready(ctx context.Context, req *ReadinessRequest) error {
 // ClusterStatus returns status information about the entire KMS cluster.
 // The returned ClusterStatusResponse contains status information for all
 // nodes within the cluster. It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
 func (c *Client) ClusterStatus(ctx context.Context, _ *ClusterStatusRequest) (*ClusterStatusResponse, error) {
 	const (
 		Method      = http.MethodGet
@@ -470,29 +443,29 @@ func (c *Client) ClusterStatus(ctx context.Context, _ *ClusterStatusRequest) (*C
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path)
+	url, host, err := c.lb.URL(Path)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	req, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	req.Header.Set(headers.Accept, ContentType)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data ClusterStatusResponse
 	if err := readResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	return &data, nil
 }
@@ -512,6 +485,8 @@ func (c *Client) ClusterStatus(ctx context.Context, _ *ClusterStatusRequest) (*C
 // ClusterStatus.
 //
 // It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
 func (c *Client) EditCluster(ctx context.Context, req *EditClusterRequest) error {
 	const (
 		Method      = http.MethodPatch
@@ -520,33 +495,33 @@ func (c *Client) EditCluster(ctx context.Context, req *EditClusterRequest) error
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	body, err := pb.Marshal(req)
-	if err != nil {
-		return err
-	}
-
 	host := req.Host
 	if host == "" {
 		host = c.lb.Hosts[0]
 	}
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return hostError(host, err)
+	}
 	url, err := url.JoinPath(httpsURL(host), Path)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -559,6 +534,8 @@ func (c *Client) EditCluster(ctx context.Context, req *EditClusterRequest) error
 // part of a multi-node cluster already.
 //
 // It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
 func (c *Client) AddNode(ctx context.Context, req *AddNodeRequest) error {
 	const (
 		Method      = http.MethodPatch
@@ -567,24 +544,24 @@ func (c *Client) AddNode(ctx context.Context, req *AddNodeRequest) error {
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Host)
+	url, host, err := c.lb.URL(Path, req.Host)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 
 	c.lb.Hosts = append(c.lb.Hosts, req.Host)
@@ -595,6 +572,8 @@ func (c *Client) AddNode(ctx context.Context, req *AddNodeRequest) error {
 // cluster. It returns an error if the server is not part of the cluster.
 //
 // It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
 func (c *Client) RemoveNode(ctx context.Context, req *RemoveNodeRequest) error {
 	const (
 		Method      = http.MethodPatch
@@ -603,24 +582,24 @@ func (c *Client) RemoveNode(ctx context.Context, req *RemoveNodeRequest) error {
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Host)
+	url, host, err := c.lb.URL(Path, req.Host)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 
 	hosts := make([]string, 0, len(c.lb.Hosts))
@@ -638,6 +617,8 @@ func (c *Client) RemoveNode(ctx context.Context, req *RemoveNodeRequest) error {
 // must be closed by the caller.
 //
 // It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
 func (c *Client) BackupDB(ctx context.Context, _ *BackupDBRequest) (*BackupDBResponse, error) {
 	const (
 		Method   = http.MethodGet
@@ -645,23 +626,23 @@ func (c *Client) BackupDB(ctx context.Context, _ *BackupDBRequest) (*BackupDBRes
 		StatusOK = http.StatusOK
 	)
 
-	url, err := c.lb.URL(Path)
+	url, host, err := c.lb.URL(Path)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Add(headers.Accept, headers.ContentTypeAppAny)
 	r.Header.Add(headers.Accept, headers.ContentEncodingGZIP)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	// Decompress the response body if the HTTP client doesn't
@@ -670,7 +651,7 @@ func (c *Client) BackupDB(ctx context.Context, _ *BackupDBRequest) (*BackupDBRes
 	if resp.Header.Get(headers.ContentEncoding) == headers.ContentEncodingGZIP {
 		z, err := gzip.NewReader(body)
 		if err != nil {
-			return nil, err
+			return nil, hostError(host, err)
 		}
 		body = gzipReadCloser{
 			gzip:   z,
@@ -684,8 +665,12 @@ func (c *Client) BackupDB(ctx context.Context, _ *BackupDBRequest) (*BackupDBRes
 
 // CreateEnclave creates a new enclave with the name req.Name.
 //
-// It returns ErrEnclaveExists if such an enclave already exists.
+// It returns ErrEnclaveExists if such an enclave already exists
+// wrapped in HostError.
+//
 // It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
 func (c *Client) CreateEnclave(ctx context.Context, req *CreateEnclaveRequest) error {
 	const (
 		Method      = http.MethodPut
@@ -694,24 +679,24 @@ func (c *Client) CreateEnclave(ctx context.Context, req *CreateEnclaveRequest) e
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Name)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -719,8 +704,12 @@ func (c *Client) CreateEnclave(ctx context.Context, req *CreateEnclaveRequest) e
 // DescribeEnclave returns metadata about the enclave with the
 // the name req.Name.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists.
+// It returns ErrEnclaveNotFound if no such enclave exists
+// wrapped in a HostError.
+//
 // It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
 func (c *Client) DescribeEnclave(ctx context.Context, req *DescribeEnclaveRequest) (*DescribeEnclaveResponse, error) {
 	const (
 		Method      = http.MethodGet
@@ -729,37 +718,41 @@ func (c *Client) DescribeEnclave(ctx context.Context, req *DescribeEnclaveReques
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Name)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data DescribeEnclaveResponse
 	if err := readResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	return &data, nil
 }
 
 // DeleteEnclave deletes the enclave with the name req.Name.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists.
+// It returns ErrEnclaveNotFound if no such enclave exists
+// wrapped in a HostError.
+//
 // It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
 func (c *Client) DeleteEnclave(ctx context.Context, req *DeleteEnclaveRequest) error {
 	const (
 		Method      = http.MethodDelete
@@ -768,24 +761,24 @@ func (c *Client) DeleteEnclave(ctx context.Context, req *DeleteEnclaveRequest) e
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Name)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -798,6 +791,8 @@ func (c *Client) DeleteEnclave(ctx context.Context, req *DeleteEnclaveRequest) e
 // of enclaves combine it with an Iter.
 //
 // It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
 func (c *Client) ListEnclaves(ctx context.Context, req *ListRequest) (*Page[DescribeEnclaveResponse], error) {
 	const (
 		Method      = http.MethodGet
@@ -817,32 +812,32 @@ func (c *Client) ListEnclaves(ctx context.Context, req *ListRequest) (*Page[Desc
 		query[QueryLimit] = []string{strconv.Itoa(req.Limit)}
 	}
 
-	url, err := c.lb.URL(Path, req.Prefix)
+	url, host, err := c.lb.URL(Path, req.Prefix)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	if len(query) > 0 {
 		url += "?" + query.Encode()
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data pb.ListEnclavesResponse
 	if err = readProtoResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 
 	ls := &Page[DescribeEnclaveResponse]{
@@ -852,7 +847,7 @@ func (c *Client) ListEnclaves(ctx context.Context, req *ListRequest) (*Page[Desc
 	for _, e := range data.Enclaves {
 		var r DescribeEnclaveResponse
 		if err = r.UnmarshalPB(e); err != nil {
-			return nil, err
+			return nil, hostError(host, err)
 		}
 		ls.Items = append(ls.Items, r)
 	}
@@ -865,7 +860,9 @@ func (c *Client) ListEnclaves(ctx context.Context, req *ListRequest) (*Page[Desc
 // The later is often referred to as key rotation.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyExists
-// if such a key already exists.
+// if such a key already exists wrapped in a HostError.
+//
+// The returned error is of type *HostError.
 func (c *Client) CreateKey(ctx context.Context, req *CreateKeyRequest) error {
 	const (
 		Method      = http.MethodPut
@@ -874,30 +871,29 @@ func (c *Client) CreateKey(ctx context.Context, req *CreateKeyRequest) error {
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
+	url, host, err := c.lb.URL(Path, req.Name)
+	if err != nil {
+		return hostError(host, err)
+	}
 	body, err := pb.Marshal(req)
 	if err != nil {
-		return err
-	}
-
-	url, err := c.lb.URL(Path, req.Name)
-	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -906,7 +902,9 @@ func (c *Client) CreateKey(ctx context.Context, req *CreateKeyRequest) error {
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrKeyNotFound if no such key exists.
+// ErrKeyNotFound if no such key exists wrapped in a HostError.
+//
+// The returned error is of type *HostError.
 func (c *Client) DescribeKeyVersion(ctx context.Context, req *DescribeKeyVersionRequest) (*DescribeKeyVersionResponse, error) {
 	const (
 		Method      = http.MethodGet
@@ -915,30 +913,30 @@ func (c *Client) DescribeKeyVersion(ctx context.Context, req *DescribeKeyVersion
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Name)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data DescribeKeyVersionResponse
 	if err := readResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	return &data, nil
 }
@@ -949,7 +947,9 @@ func (c *Client) DescribeKeyVersion(ctx context.Context, req *DescribeKeyVersion
 // if req.AllVersions is true.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyNotFound
-// if such key or key version exists.
+// if such key or key version exists wrapped in a HostError.
+//
+// The returned error is of type *HostError.
 func (c *Client) DeleteKey(ctx context.Context, req *DeleteKeyRequest) error {
 	const (
 		Method      = http.MethodDelete
@@ -958,30 +958,30 @@ func (c *Client) DeleteKey(ctx context.Context, req *DeleteKeyRequest) error {
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	body, err := pb.Marshal(req)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 
-	url, err := c.lb.URL(Path, req.Name)
+	body, err := pb.Marshal(req)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -992,6 +992,8 @@ func (c *Client) DeleteKey(ctx context.Context, req *DeleteKeyRequest) error {
 //
 // ListKeys implements paginated listing. For iterating over a stream
 // of keys combine it with an Iter.
+//
+// The returned error is of type *HostError.
 func (c *Client) ListKeys(ctx context.Context, req *ListRequest) (*Page[DescribeKeyVersionResponse], error) {
 	const (
 		Method      = http.MethodGet
@@ -1011,33 +1013,33 @@ func (c *Client) ListKeys(ctx context.Context, req *ListRequest) (*Page[Describe
 		query[QueryLimit] = []string{strconv.Itoa(req.Limit)}
 	}
 
-	url, err := c.lb.URL(Path, req.Prefix)
+	url, host, err := c.lb.URL(Path, req.Prefix)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	if len(query) > 0 {
 		url += "?" + query.Encode()
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data pb.ListKeysResponse
 	if err = readProtoResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 
 	ls := &Page[DescribeKeyVersionResponse]{
@@ -1047,7 +1049,7 @@ func (c *Client) ListKeys(ctx context.Context, req *ListRequest) (*Page[Describe
 	for _, k := range data.Keys {
 		var r DescribeKeyVersionResponse
 		if err = r.UnmarshalPB(k); err != nil {
-			return nil, err
+			return nil, hostError(host, err)
 		}
 		ls.Items = append(ls.Items, r)
 	}
@@ -1058,7 +1060,9 @@ func (c *Client) ListKeys(ctx context.Context, req *ListRequest) (*Page[Describe
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrKeyNotFound if no such key exists.
+// ErrKeyNotFound if no such key exists wrapped in a HostError.
+//
+// The returned error is of type *HostError.
 func (c *Client) Encrypt(ctx context.Context, req *EncryptRequest) (*EncryptResponse, error) {
 	const (
 		Method      = http.MethodPost
@@ -1067,35 +1071,35 @@ func (c *Client) Encrypt(ctx context.Context, req *EncryptRequest) (*EncryptResp
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	body, err := pb.Marshal(req)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 
-	url, err := c.lb.URL(Path, req.Name)
+	body, err := pb.Marshal(req)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data EncryptResponse
 	if err := readResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	return &data, nil
 }
@@ -1104,7 +1108,9 @@ func (c *Client) Encrypt(ctx context.Context, req *EncryptRequest) (*EncryptResp
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrKeyNotFound if no such key exists.
+// ErrKeyNotFound if no such key exists wrapped in a HostError.
+//
+// The returned error is of type *HostError.
 func (c *Client) Decrypt(ctx context.Context, req *DecryptRequest) (*DecryptResponse, error) {
 	const (
 		Method      = http.MethodPost
@@ -1113,35 +1119,35 @@ func (c *Client) Decrypt(ctx context.Context, req *DecryptRequest) (*DecryptResp
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	body, err := pb.Marshal(req)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 
-	url, err := c.lb.URL(Path, req.Name)
+	body, err := pb.Marshal(req)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data DecryptResponse
 	if err := readResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	return &data, nil
 }
@@ -1164,7 +1170,9 @@ func (c *Client) Decrypt(ctx context.Context, req *DecryptRequest) (*DecryptResp
 // for future key rotation.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrKeyNotFound if no such key exists.
+// ErrKeyNotFound if no such key exists wrapped in a HostError.
+//
+// The returned error is of type *HostError.
 func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*GenerateKeyResponse, error) {
 	const (
 		Method      = http.MethodPost
@@ -1173,35 +1181,35 @@ func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*Gen
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	body, err := pb.Marshal(req)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 
-	url, err := c.lb.URL(Path, req.Name)
+	body, err := pb.Marshal(req)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data GenerateKeyResponse
 	if err := readResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	return &data, nil
 }
@@ -1209,7 +1217,8 @@ func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*Gen
 // CreatePolicy creates a new or overwrites an exisiting policy with the
 // name req.Name within req.Enclave.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists.
+// It returns ErrEnclaveNotFound if no such enclave exists wrapped in a
+// HostError. The returned error is of type *HostError.
 func (c *Client) CreatePolicy(ctx context.Context, req *CreatePolicyRequest) error {
 	const (
 		Method      = http.MethodPut
@@ -1218,30 +1227,30 @@ func (c *Client) CreatePolicy(ctx context.Context, req *CreatePolicyRequest) err
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	body, err := pb.Marshal(req)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 
-	url, err := c.lb.URL(Path, req.Name)
+	body, err := pb.Marshal(req)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -1250,7 +1259,8 @@ func (c *Client) CreatePolicy(ctx context.Context, req *CreatePolicyRequest) err
 // Both, the policy and identity, must reside within the same enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists, ErrPolicyNotFound
-// if no such policy exists and ErrIdentityNotFound if no such identity exists.
+// if no such policy exists and ErrIdentityNotFound if no such identity exists
+// wrapped in a HostError. The returned error is of type *HostError.
 func (c *Client) AssignPolicy(ctx context.Context, req *AssignPolicyRequest) error {
 	const (
 		Method      = http.MethodPatch
@@ -1259,30 +1269,30 @@ func (c *Client) AssignPolicy(ctx context.Context, req *AssignPolicyRequest) err
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	body, err := pb.Marshal(req)
+	url, host, err := c.lb.URL(Path, req.Policy)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 
-	url, err := c.lb.URL(Path, req.Policy)
+	body, err := pb.Marshal(req)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -1291,7 +1301,8 @@ func (c *Client) AssignPolicy(ctx context.Context, req *AssignPolicyRequest) err
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrPolicyNotFound if no such policy exists.
+// ErrPolicyNotFound if no such policy exists wrapped in a
+// HostError. The returned error is of type *HostError.
 func (c *Client) DescribePolicy(ctx context.Context, req *PolicyRequest) (*DescribePolicyResponse, error) {
 	const (
 		Method      = http.MethodGet
@@ -1300,30 +1311,30 @@ func (c *Client) DescribePolicy(ctx context.Context, req *PolicyRequest) (*Descr
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Name)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data DescribePolicyResponse
 	if err := readResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	return &data, nil
 }
@@ -1331,7 +1342,8 @@ func (c *Client) DescribePolicy(ctx context.Context, req *PolicyRequest) (*Descr
 // GetPolicy fetches the policy req.Name within the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrPolicyNotFound if no such policy exists.
+// ErrPolicyNotFound if no such policy exists wrapped in a
+// HostError. The returned error is of type *HostError.
 func (c *Client) GetPolicy(ctx context.Context, req *PolicyRequest) (*PolicyResponse, error) {
 	const (
 		Method      = http.MethodGet
@@ -1340,30 +1352,30 @@ func (c *Client) GetPolicy(ctx context.Context, req *PolicyRequest) (*PolicyResp
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Name)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data PolicyResponse
 	if err := readResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	return &data, nil
 }
@@ -1371,7 +1383,8 @@ func (c *Client) GetPolicy(ctx context.Context, req *PolicyRequest) (*PolicyResp
 // DeletePolicy deletes the policy with the name req.Name within req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrPolicyNotFound
-// if such policy exists.
+// if such policy exists wrapped in a HostError. The returned error is of type
+// *HostError.
 func (c *Client) DeletePolicy(ctx context.Context, req *DeletePolicyRequest) error {
 	const (
 		Method      = http.MethodDelete
@@ -1380,25 +1393,25 @@ func (c *Client) DeletePolicy(ctx context.Context, req *DeletePolicyRequest) err
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Name)
+	url, host, err := c.lb.URL(Path, req.Name)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -1409,6 +1422,8 @@ func (c *Client) DeletePolicy(ctx context.Context, req *DeletePolicyRequest) err
 //
 // ListPolicies implements paginated listing. For iterating over a stream
 // of policies combine it with an Iter.
+//
+// The returned error is of type *HostError.
 func (c *Client) ListPolicies(ctx context.Context, req *ListRequest) (*Page[DescribePolicyResponse], error) {
 	const (
 		Method      = http.MethodGet
@@ -1428,33 +1443,33 @@ func (c *Client) ListPolicies(ctx context.Context, req *ListRequest) (*Page[Desc
 		query[QueryLimit] = []string{strconv.Itoa(req.Limit)}
 	}
 
-	url, err := c.lb.URL(Path, req.Prefix)
+	url, host, err := c.lb.URL(Path, req.Prefix)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	if len(query) > 0 {
 		url += "?" + query.Encode()
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data pb.ListPoliciesResponse
 	if err = readProtoResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 
 	ls := &Page[DescribePolicyResponse]{
@@ -1464,7 +1479,7 @@ func (c *Client) ListPolicies(ctx context.Context, req *ListRequest) (*Page[Desc
 	for _, k := range data.Policies {
 		var r DescribePolicyResponse
 		if err = r.UnmarshalPB(k); err != nil {
-			return nil, err
+			return nil, hostError(host, err)
 		}
 		ls.Items = append(ls.Items, r)
 	}
@@ -1474,7 +1489,8 @@ func (c *Client) ListPolicies(ctx context.Context, req *ListRequest) (*Page[Desc
 // CreateIdentity creates a new or overwrites an exisiting identity with the
 // name req.Identity within req.Enclave.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists.
+// It returns ErrEnclaveNotFound if no such enclave exists wrapped in a
+// HostError. The returned error is of type *HostError.
 func (c *Client) CreateIdentity(ctx context.Context, req *CreateIdentityRequest) error {
 	const (
 		Method      = http.MethodPut
@@ -1483,30 +1499,29 @@ func (c *Client) CreateIdentity(ctx context.Context, req *CreateIdentityRequest)
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
+	url, host, err := c.lb.URL(Path, req.Identity.String())
+	if err != nil {
+		return hostError(host, err)
+	}
 	body, err := pb.Marshal(req)
 	if err != nil {
-		return err
-	}
-
-	url, err := c.lb.URL(Path, req.Identity.String())
-	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -1515,7 +1530,8 @@ func (c *Client) CreateIdentity(ctx context.Context, req *CreateIdentityRequest)
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrIdentityNotFound if no such identity exists.
+// ErrIdentityNotFound if no such identity exists wrapped in a
+// HostError. The returned error is of type *HostError.
 func (c *Client) DescribeIdentity(ctx context.Context, req *IdentityRequest) (*DescribeIdentityResponse, error) {
 	const (
 		Method      = http.MethodGet
@@ -1524,30 +1540,30 @@ func (c *Client) DescribeIdentity(ctx context.Context, req *IdentityRequest) (*D
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Identity.String())
+	url, host, err := c.lb.URL(Path, req.Identity.String())
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data DescribeIdentityResponse
 	if err = readResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	return &data, nil
 }
@@ -1555,7 +1571,8 @@ func (c *Client) DescribeIdentity(ctx context.Context, req *IdentityRequest) (*D
 // DeleteIdentity deletes the identity with the name req.Identity within req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrIdentityNotFound
-// if such identity exists.
+// if such identity exists wrapped in a HostError. The returned error is of type
+// *HostError.
 func (c *Client) DeleteIdentity(ctx context.Context, req *DeleteIdentityRequest) error {
 	const (
 		Method      = http.MethodDelete
@@ -1564,25 +1581,25 @@ func (c *Client) DeleteIdentity(ctx context.Context, req *DeleteIdentityRequest)
 		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
 	)
 
-	url, err := c.lb.URL(Path, req.Identity.String())
+	url, host, err := c.lb.URL(Path, req.Identity.String())
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return err
+		return hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return readError(resp)
+		return hostError(host, readError(resp))
 	}
 	return nil
 }
@@ -1593,6 +1610,8 @@ func (c *Client) DeleteIdentity(ctx context.Context, req *DeleteIdentityRequest)
 //
 // ListIdentities implements paginated listing. For iterating over a stream
 // of identities combine it with an Iter.
+//
+// The returned error is of type *HostError.
 func (c *Client) ListIdentities(ctx context.Context, req *ListRequest) (*Page[DescribeIdentityResponse], error) {
 	const (
 		Method      = http.MethodGet
@@ -1612,33 +1631,33 @@ func (c *Client) ListIdentities(ctx context.Context, req *ListRequest) (*Page[De
 		query[QueryLimit] = []string{strconv.Itoa(req.Limit)}
 	}
 
-	url, err := c.lb.URL(Path, req.Prefix)
+	url, host, err := c.lb.URL(Path, req.Prefix)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	if len(query) > 0 {
 		url += "?" + query.Encode()
 	}
 	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	r.Header.Set(headers.Accept, ContentType)
 	r.Header.Set(headers.Enclave, req.Enclave)
 
 	resp, err := c.client.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != StatusOK {
-		return nil, readError(resp)
+		return nil, hostError(host, readError(resp))
 	}
 
 	var data pb.ListIdentitiesResponse
 	if err = readProtoResponse(resp, &data); err != nil {
-		return nil, err
+		return nil, hostError(host, err)
 	}
 
 	ls := &Page[DescribeIdentityResponse]{
@@ -1648,7 +1667,7 @@ func (c *Client) ListIdentities(ctx context.Context, req *ListRequest) (*Page[De
 	for _, k := range data.Identities {
 		var r DescribeIdentityResponse
 		if err = r.UnmarshalPB(k); err != nil {
-			return nil, err
+			return nil, hostError(host, err)
 		}
 		ls.Items = append(ls.Items, r)
 	}

@@ -58,17 +58,19 @@ type LoadBalancer struct {
 // resulting path cleaned of any ./ or ../ elements.
 //
 // The scheme of the returned URL is "https://".
-func (lb *LoadBalancer) URL(elems ...string) (string, error) {
+// The second return value is the URL's host.
+func (lb *LoadBalancer) URL(elems ...string) (string, string, error) {
 	host, err := lb.Host()
 	if err != nil {
-		return "", err
+		return "", host, err
 	}
 
 	const Scheme = "https://"
 	if !strings.HasPrefix(host, Scheme) {
 		host = Scheme + host
 	}
-	return url.JoinPath(host, elems...)
+	url, err := url.JoinPath(host, elems...)
+	return url, host, err
 }
 
 // Host returns the next host to send requests to. It
