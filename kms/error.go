@@ -173,7 +173,9 @@ type HostError struct {
 var _ net.Error = (*HostError)(nil) // compiler check
 
 // Error returns the underlying error message prefixed by the host.
-func (e *HostError) Error() string { return fmt.Sprintf("%q: %s", e.Host, e.Err.Error()) }
+func (e *HostError) Error() string {
+	return fmt.Sprintf("%q: %s", strings.TrimPrefix(e.Host, "https://"), e.Err.Error())
+}
 
 // Unwrap returns the underlying error.
 func (e *HostError) Unwrap() error { return e.Err }

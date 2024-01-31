@@ -25,11 +25,6 @@ const (
 	XFrameOptions = "X-Frame-Options" // Non-standard
 )
 
-// Custom MinIO-specific HTTP headers.
-const (
-	Enclave = "Minio-Kms-Enclave" // Non-standard
-)
-
 // Commonly used HTTP content type values.
 const (
 	ContentTypeAny       = "*/*"

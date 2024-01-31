@@ -7,16 +7,68 @@ package kms
 import (
 	"compress/gzip"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
 
+	"github.com/minio/kms-go/kms/cmds"
 	"github.com/minio/kms-go/kms/internal/headers"
 	pb "github.com/minio/kms-go/kms/protobuf"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
+
+func decodeResponse[M any, P pb.Pointer[M], T pb.Unmarshaler[P]](r *http.Response, c cmds.Command, v T) error {
+	if r.ContentLength < 0 {
+		return &HostError{
+			Host: r.Request.Host,
+			Err:  Error{http.StatusLengthRequired, "request content length is negative"},
+		}
+	}
+
+	buf := make([]byte, r.ContentLength)
+	if _, err := io.ReadFull(r.Body, buf); err != nil {
+		return hostError(r.Request.Host, err)
+	}
+
+	b, err := cmds.Decode[M, P, T](buf, c, v)
+	if err != nil {
+		return hostError(r.Request.Host, err)
+	}
+	if len(b) != 0 {
+		return &HostError{
+			Host: r.Request.Host,
+			Err:  errors.New("kms: response body contains additional data"),
+		}
+	}
+	return nil
+}
+
+func decodeResponseMessage(r *http.Response, c cmds.Command, v proto.Message) error {
+	if r.ContentLength < 0 {
+		return &HostError{
+			Host: r.Request.Host,
+			Err:  Error{http.StatusLengthRequired, "request content length is negative"},
+		}
+	}
+
+	buf := make([]byte, r.ContentLength)
+	if _, err := io.ReadFull(r.Body, buf); err != nil {
+		return hostError(r.Request.Host, err)
+	}
+
+	b, err := cmds.DecodePB(buf, c, v)
+	if err != nil {
+		return hostError(r.Request.Host, err)
+	}
+	if len(b) != 0 {
+		return &HostError{
+			Host: r.Request.Host,
+			Err:  errors.New("kms: response body contains additional data"),
+		}
+	}
+	return nil
+}
 
 // readResponse reads the response body into v using the
 // response content encoding.
@@ -91,7 +143,7 @@ func (r *VersionResponse) MarshalPB(v *pb.VersionResponse) error {
 	v.Version = r.Version
 	v.Commit = r.Commit
 	v.APIVersion = r.APIVersion
-	v.Addr = r.Host
+	v.Host = r.Host
 	return nil
 }
 
@@ -100,7 +152,7 @@ func (r *VersionResponse) UnmarshalPB(v *pb.VersionResponse) error {
 	r.Version = v.Version
 	r.Commit = v.Commit
 	r.APIVersion = v.APIVersion
-	r.Host = v.Addr
+	r.Host = v.Host
 	return nil
 }
 
@@ -153,7 +205,7 @@ type ServerStatusResponse struct {
 func (s *ServerStatusResponse) MarshalPB(v *pb.ServerStatusResponse) error {
 	v.Version = s.Version
 	v.APIVersion = s.APIVersion
-	v.Addr = s.Host
+	v.Host = s.Host
 	v.UpTime = pb.Duration(s.UpTime)
 	v.OS = s.OS
 	v.Arch = s.CPUArch
@@ -168,7 +220,7 @@ func (s *ServerStatusResponse) MarshalPB(v *pb.ServerStatusResponse) error {
 func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
 	s.Version = v.Version
 	s.APIVersion = v.APIVersion
-	s.Host = v.Addr
+	s.Host = v.Host
 	s.UpTime = v.UpTime.AsDuration()
 	s.OS = v.OS
 	s.CPUArch = v.Arch
@@ -323,13 +375,13 @@ func (s *ClusterStatusResponse) UnmarshalPB(v *pb.ClusterStatusResponse) error {
 	return nil
 }
 
-// BackupDBResponse contains the database content received from a KMS server.
-type BackupDBResponse struct {
+// ReadDBResponse contains the database content received from a KMS server.
+type ReadDBResponse struct {
 	Body io.ReadCloser // The database content
 }
 
 // Read reads data from the response body into b.
-func (r *BackupDBResponse) Read(b []byte) (int, error) {
+func (r *ReadDBResponse) Read(b []byte) (int, error) {
 	n, err := r.Body.Read(b)
 	if errors.Is(err, io.EOF) {
 		r.Body.Close()
@@ -338,7 +390,7 @@ func (r *BackupDBResponse) Read(b []byte) (int, error) {
 }
 
 // Close closes the underlying response body.
-func (r *BackupDBResponse) Close() error {
+func (r *ReadDBResponse) Close() error {
 	return r.Body.Close()
 }
 
@@ -360,8 +412,8 @@ func (r gzipReadCloser) Close() error {
 	return err
 }
 
-// DescribeEnclaveResponse contains information about an enclave.
-type DescribeEnclaveResponse struct {
+// EnclaveStatusResponse contains information about an enclave.
+type EnclaveStatusResponse struct {
 	// Name is the name of the enclave.
 	Name string
 
@@ -372,24 +424,24 @@ type DescribeEnclaveResponse struct {
 	CreatedBy Identity
 }
 
-// MarshalPB converts the DescribeEnclaveResponse into its protobuf representation.
-func (r *DescribeEnclaveResponse) MarshalPB(v *pb.DescribeEnclaveResponse) error {
+// MarshalPB converts the EnclaveStatusResponse into its protobuf representation.
+func (r *EnclaveStatusResponse) MarshalPB(v *pb.EnclaveStatusResponse) error {
 	v.Name = r.Name
 	v.CreatedAt = pb.Time(r.CreatedAt)
 	v.CreatedBy = r.CreatedBy.String()
 	return nil
 }
 
-// UnmarshalPB initializes the DescribeEnclaveResponse from its protobuf representation.
-func (r *DescribeEnclaveResponse) UnmarshalPB(v *pb.DescribeEnclaveResponse) error {
+// UnmarshalPB initializes the EnclaveStatusResponse from its protobuf representation.
+func (r *EnclaveStatusResponse) UnmarshalPB(v *pb.EnclaveStatusResponse) error {
 	r.Name = v.Name
 	r.CreatedAt = v.CreatedAt.AsTime()
 	r.CreatedBy = Identity(v.CreatedBy)
 	return nil
 }
 
-// DescribeKeyVersionResponse contains information about a secret key version.
-type DescribeKeyVersionResponse struct {
+// KeyStatusResponse contains information about a secret key version.
+type KeyStatusResponse struct {
 	// Name is the name of the secret key ring.
 	Name string
 
@@ -406,8 +458,8 @@ type DescribeKeyVersionResponse struct {
 	CreatedBy Identity
 }
 
-// MarshalPB converts the DescribeKeyVersionResponse into its protobuf representation.
-func (r *DescribeKeyVersionResponse) MarshalPB(v *pb.DescribeKeyVersionResponse) error {
+// MarshalPB converts the KeyStatusResponse into its protobuf representation.
+func (r *KeyStatusResponse) MarshalPB(v *pb.KeyStatusResponse) error {
 	v.Name = r.Name
 	v.Version = uint32(r.Version)
 	v.Type = r.Type.String()
@@ -416,8 +468,8 @@ func (r *DescribeKeyVersionResponse) MarshalPB(v *pb.DescribeKeyVersionResponse)
 	return nil
 }
 
-// UnmarshalPB initializes the DescribeKeyVersionResponse from its protobuf representation.
-func (r *DescribeKeyVersionResponse) UnmarshalPB(v *pb.DescribeKeyVersionResponse) error {
+// UnmarshalPB initializes the KeyStatusResponse from its protobuf representation.
+func (r *KeyStatusResponse) UnmarshalPB(v *pb.KeyStatusResponse) error {
 	t, err := secretKeyTypeFromString(v.Type)
 	if err != nil {
 		return err
@@ -508,8 +560,8 @@ func (r *GenerateKeyResponse) UnmarshalPB(v *pb.GenerateKeyResponse) error {
 	return nil
 }
 
-// DescribePolicyResponse contains information about a policy.
-type DescribePolicyResponse struct {
+// PolicyStatusResponse contains information about a policy.
+type PolicyStatusResponse struct {
 	// Name is the name of the policy.
 	Name string
 
@@ -520,16 +572,16 @@ type DescribePolicyResponse struct {
 	CreatedBy Identity
 }
 
-// MarshalPB converts the DescribePolicyResponse into its protobuf representation.
-func (r *DescribePolicyResponse) MarshalPB(v *pb.DescribePolicyResponse) error {
+// MarshalPB converts the PolicyStatusResponse into its protobuf representation.
+func (r *PolicyStatusResponse) MarshalPB(v *pb.PolicyStatusResponse) error {
 	v.Name = r.Name
 	v.CreatedAt = pb.Time(r.CreatedAt)
 	v.CreatedBy = r.CreatedBy.String()
 	return nil
 }
 
-// UnmarshalPB initializes the DescribePolicyResponse from its protobuf representation.
-func (r *DescribePolicyResponse) UnmarshalPB(v *pb.DescribePolicyResponse) error {
+// UnmarshalPB initializes the PolicyStatusResponse from its protobuf representation.
+func (r *PolicyStatusResponse) UnmarshalPB(v *pb.PolicyStatusResponse) error {
 	r.Name = v.Name
 	r.CreatedAt = v.CreatedAt.AsTime()
 	r.CreatedBy = Identity(v.CreatedBy)
@@ -542,10 +594,10 @@ type PolicyResponse struct {
 	Name string
 
 	// Allow is the set of allow rules.
-	Allow map[string]Rule
+	Allow map[cmds.Command]RuleSet
 
 	// Deny is the set of deny rules.
-	Deny map[string]Rule
+	Deny map[cmds.Command]RuleSet
 
 	// CreatedAt is the point in time when the policy has been created.
 	CreatedAt time.Time
@@ -558,14 +610,22 @@ type PolicyResponse struct {
 func (r *PolicyResponse) MarshalPB(v *pb.PolicyResponse) error {
 	v.Name = r.Name
 
-	v.Allow = make(map[string]string, len(r.Allow))
-	for path, rule := range r.Allow {
-		v.Allow[path] = rule.String()
+	v.Allow = make(map[string]*pb.RuleSet, len(r.Allow))
+	for cmd, set := range r.Allow {
+		rs := new(pb.RuleSet)
+		if err := set.MarshalPB(rs); err != nil {
+			return err
+		}
+		v.Allow[cmd.String()] = rs
 	}
 
-	v.Deny = make(map[string]string, len(r.Deny))
-	for path, rule := range r.Deny {
-		v.Deny[path] = rule.String()
+	v.Deny = make(map[string]*pb.RuleSet, len(r.Deny))
+	for cmd, set := range r.Deny {
+		rs := new(pb.RuleSet)
+		if err := set.MarshalPB(rs); err != nil {
+			return err
+		}
+		v.Deny[cmd.String()] = rs
 	}
 
 	v.CreatedAt = pb.Time(r.CreatedAt)
@@ -577,20 +637,32 @@ func (r *PolicyResponse) MarshalPB(v *pb.PolicyResponse) error {
 func (r *PolicyResponse) UnmarshalPB(v *pb.PolicyResponse) error {
 	r.Name = v.Name
 
-	r.Allow = make(map[string]Rule, len(v.Allow))
-	for path, rule := range v.Allow {
-		if rule != "" {
-			return fmt.Errorf("kms: invalid allow rule '%s' for API '%s'", rule, path)
+	r.Allow = make(map[cmds.Command]RuleSet, len(v.Allow))
+	for cmd, set := range v.Allow {
+		var c cmds.Command
+		if err := c.UnmarshalText([]byte(cmd)); err != nil {
+			return err
 		}
-		r.Allow[path] = Rule{}
+
+		var rs RuleSet
+		if err := rs.UnmarshalPB(set); err != nil {
+			return err
+		}
+		r.Allow[c] = rs
 	}
 
-	r.Deny = make(map[string]Rule, len(v.Deny))
-	for path, rule := range v.Deny {
-		if rule != "" {
-			return fmt.Errorf("kms: invalid deny rule '%s' for API '%s'", rule, path)
+	r.Deny = make(map[cmds.Command]RuleSet, len(v.Deny))
+	for cmd, set := range v.Deny {
+		var c cmds.Command
+		if err := c.UnmarshalText([]byte(cmd)); err != nil {
+			return err
 		}
-		r.Deny[path] = Rule{}
+
+		var rs RuleSet
+		if err := rs.UnmarshalPB(set); err != nil {
+			return err
+		}
+		r.Deny[c] = rs
 	}
 
 	r.CreatedAt = v.CreatedAt.AsTime()
@@ -598,8 +670,8 @@ func (r *PolicyResponse) UnmarshalPB(v *pb.PolicyResponse) error {
 	return nil
 }
 
-// DescribeIdentityResponse contains information about an identity.
-type DescribeIdentityResponse struct {
+// IdentityResponse contains information about an identity.
+type IdentityResponse struct {
 	// Identity is the identity referring to a private/public key pair.
 	Identity Identity
 
@@ -626,8 +698,8 @@ type DescribeIdentityResponse struct {
 	ServiceAccounts []Identity
 }
 
-// MarshalPB converts the DescribeIdentityResponse into its protobuf representation.
-func (r *DescribeIdentityResponse) MarshalPB(v *pb.DescribeIdentityResponse) error {
+// MarshalPB converts the IdentityResponse into its protobuf representation.
+func (r *IdentityResponse) MarshalPB(v *pb.IdentityResponse) error {
 	v.Identity = r.Identity.String()
 	v.Privilege = uint32(r.Privilege)
 	v.Policy = r.Policy
@@ -641,8 +713,8 @@ func (r *DescribeIdentityResponse) MarshalPB(v *pb.DescribeIdentityResponse) err
 	return nil
 }
 
-// UnmarshalPB initializes the DescribeIdentityResponse from its protobuf representation.
-func (r *DescribeIdentityResponse) UnmarshalPB(v *pb.DescribeIdentityResponse) error {
+// UnmarshalPB initializes the IdentityResponse from its protobuf representation.
+func (r *IdentityResponse) UnmarshalPB(v *pb.IdentityResponse) error {
 	r.Identity = Identity(v.Identity)
 	r.Privilege = Privilege(v.Privilege)
 	r.Policy = v.Policy

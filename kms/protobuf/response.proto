@@ -14,6 +14,8 @@ package minio.kms;
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
+import "rule.proto";
+
 option go_package = "kms/protobuf";
 
 message ErrResponse {
@@ -34,8 +36,8 @@ message VersionResponse {
   // For example, "v1".
   string APIVersion = 3 [ json_name="api_version" ];
 
-  // Addr is the KMS server address as 'host' or 'host:port'. 
-  string Addr = 4 [ json_name="address" ];
+  // Host is the KMS server host or host:port. 
+  string Host = 4 [ json_name="host" ];
 }
 
 message ServerStatusResponse {
@@ -48,8 +50,8 @@ message ServerStatusResponse {
   // For example, "v1".
   string APIVersion = 2 [ json_name="api_version" ];
 
-    // Addr is the KMS server address as 'host' or 'host:port'. 
-  string Addr = 3 [ json_name="address" ];
+  // Host is the KMS server host or host:port. 
+  string Host = 3 [ json_name="host" ];
 
   // UpTime is the amount of time the KMS server is up and running.
   google.protobuf.Duration UpTime = 4 [ json_name="uptime" ];
@@ -131,7 +133,7 @@ message ClusterStatusResponse {
   map<uint32,string> NodesDown = 2 [ json_name="nodes_down" ];
 }
 
-message DescribeEnclaveResponse {
+message EnclaveStatusResponse {
   // Name is the name of the enclave.
   string Name = 1 [ json_name = "name" ];
 
@@ -142,33 +144,13 @@ message DescribeEnclaveResponse {
   string CreatedBy = 3 [ json_name = "created_by" ];
 }
 
-message DescribeRouteResponse {
-  // Method is the HTTP method of the API.
-  string Method = 1 [ json_name="method" ];
-
-  // Path is the request URL path.
-  string Path = 2 [ json_name="path" ];
-
-  // MaxBody is the max. request body length accepted by the API.
-  // If < 0, no length limit is enforced.
-  int64 MaxBody = 3 [ json_name="max_body" ];
-
-  // Timeout defines how long a request can take before the API handler
-  // aborts the request and returns a HTTP timeout error.
-  google.protobuf.Duration Timeout = 4 [ json_name="timeout" ];
-}
-
-message ListAPIsResponse {
-  repeated DescribeRouteResponse APIs = 1;
-}
-
 message ListEnclavesResponse {
-  repeated DescribeEnclaveResponse Enclaves = 1 [ json_name = "enclaves" ];
+  repeated EnclaveStatusResponse Enclaves = 1 [ json_name = "enclaves" ];
 
   string ContinueAt = 2 [ json_name = "continue_at" ];
 }
 
-message DescribeKeyVersionResponse {
+message KeyStatusResponse {
   // Name is the name of the key.
   string Name = 1 [ json_name="name" ];
 
@@ -186,7 +168,7 @@ message DescribeKeyVersionResponse {
 }
 
 message ListKeysResponse {
-  repeated DescribeKeyVersionResponse Keys = 1 [ json_name = "keys" ];
+  repeated KeyStatusResponse Keys = 1 [ json_name = "keys" ];
 
   string ContinueAt = 2 [ json_name = "continue_at" ];
 }
@@ -219,7 +201,7 @@ message GenerateKeyResponse {
   bytes Ciphertext = 3 [ json_name = "ciphertext" ];
 }
 
-message DescribePolicyResponse {
+message PolicyStatusResponse {
   // Name is the name of the policy.
   string Name = 1 [ json_name = "name" ];
 
@@ -237,12 +219,12 @@ message PolicyResponse {
   // Allow contains a set of API path patterns and corresponding policy rules.
   // Requests that match at least one path, but not any deny pattern, and
   // pass the corresponding policy rule are accepted by the server.
-  map<string,string> Allow = 2 [ json_name = "allow" ];
+  map<string, RuleSet> Allow = 2 [ json_name = "allow" ];
 
   // Deny contains a set of API path patterns and corresponding policy rules.
   // Requests that match at least one path and pass the corresponding policy
   // rule are rejected by the server.
-  map<string,string> Deny = 3 [ json_name = "deny" ];
+  map<string, RuleSet> Deny = 3 [ json_name = "deny" ];
 
   // CreatedAt is the point in time when this policy got created.
   google.protobuf.Timestamp CreatedAt = 4 [ json_name="created_at" ];
@@ -252,12 +234,12 @@ message PolicyResponse {
 }
 
 message ListPoliciesResponse {
-  repeated DescribePolicyResponse Policies = 1 [ json_name = "policies" ];
+  repeated PolicyStatusResponse Policies = 1 [ json_name = "policies" ];
 
   string ContinueAt = 2 [ json_name = "continue_at" ];
 }
 
-message DescribeIdentityResponse {
+message IdentityResponse {
   string Identity = 1 [ json_name = "identity" ];
 
   uint32 Privilege = 2 [ json_name = "privilege" ];
@@ -276,7 +258,7 @@ message DescribeIdentityResponse {
 }
 
 message ListIdentitiesResponse {
-  repeated DescribeIdentityResponse Identities = 1 [ json_name = "identities" ];
+  repeated IdentityResponse Identities = 1 [ json_name = "identities" ];
 
   string ContinueAt = 2 [ json_name = "continue_at" ];
 }

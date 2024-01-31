@@ -7,8 +7,38 @@ package kms
 import (
 	"errors"
 
+	"github.com/minio/kms-go/kms/cmds"
 	pb "github.com/minio/kms-go/kms/protobuf"
 )
+
+// Request is a structure describing a KMS request.
+type Request struct {
+	// Host is the DNS hostname or IP address of the
+	// KMS server. If empty, the Client will pick one
+	// of its KMS servers and perform client-side
+	// load balancing. Providing a host explicitly
+	// circumvents the client load balancer. This
+	// may be desirable when trying to communicate
+	// with one particular KMS server.
+	//
+	// Host may start with the HTTPS URI scheme "https://"
+	// and can contain an optional port number.
+	Host string
+
+	// Enclave is the KMS enclave in which all KMS
+	// commands specified in the request body are
+	// executed.
+	//
+	// For KMS cluster commands, like fetching cluster
+	// status information, that don't operate within
+	// any enclave, Enclave is empty.
+	Enclave string
+
+	// Body is the request body. It contains one or
+	// multiple encoded commands to be executed by
+	// the KMS.
+	Body []byte
+}
 
 // ListRequest contains generic options for listing elements,
 // like enclaves or keys.
@@ -43,6 +73,22 @@ type ListRequest struct {
 	// and the server limits listing results to a
 	// reasonable max. size.
 	Limit int
+}
+
+// MarshalPB converts the ListRequest into its protobuf representation.
+func (r *ListRequest) MarshalPB(v *pb.ListRequest) error {
+	v.Prefix = r.Prefix
+	v.ContinueAt = r.ContinueAt
+	v.Limit = uint32(max(r.Limit, 0))
+	return nil
+}
+
+// UnmarshalPB initializes the ListRequest from its protobuf representation.
+func (r *ListRequest) UnmarshalPB(v *pb.ListRequest) error {
+	r.Prefix = v.Prefix
+	r.ContinueAt = v.ContinueAt
+	r.Limit = int(v.Limit)
+	return nil
 }
 
 // VersionRequest contains options for fetching version
@@ -90,19 +136,49 @@ type ServerStatusRequest struct {
 // status information.
 type ClusterStatusRequest struct{}
 
-// AddNodeRequest describes which KMS server to add to an existing.
-type AddNodeRequest struct {
+// MarshalPB converts the ClusterStatusRequest into its protobuf representation.
+func (r *ClusterStatusRequest) MarshalPB(*pb.ClusterStatusRequest) error { return nil }
+
+// UnmarshalPB initializes the ClusterStatusRequest from its protobuf representation.
+func (r *ClusterStatusRequest) UnmarshalPB(*pb.ClusterStatusRequest) error { return nil }
+
+// AddClusterNodeRequest describes which KMS server to add to an existing.
+type AddClusterNodeRequest struct {
 	// Host is the KMS server that should join a cluster.
 	// It must be of the form "host" or "host:port".
 	Host string
 }
 
-// RemoveNodeRequest describes which server to remove from a KMS
+// MarshalPB converts the AddClusterNodeRequest into its protobuf representation.
+func (r *AddClusterNodeRequest) MarshalPB(v *pb.AddClusterNodeRequest) error {
+	v.Host = r.Host
+	return nil
+}
+
+// UnmarshalPB initializes the AddClusterNodeRequest from its protobuf representation.
+func (r *AddClusterNodeRequest) UnmarshalPB(v *pb.AddClusterNodeRequest) error {
+	r.Host = v.Host
+	return nil
+}
+
+// RemoveClusterNodeRequest describes which server to remove from a KMS
 // cluster.
-type RemoveNodeRequest struct {
+type RemoveClusterNodeRequest struct {
 	// Host is the KMS server that should leave a cluster.
 	// It must be of the form "host" or "host:port".
 	Host string
+}
+
+// MarshalPB converts the RemoveClusterNodeRequest into its protobuf representation.
+func (r *RemoveClusterNodeRequest) MarshalPB(v *pb.RemoveClusterNodeRequest) error {
+	v.Host = r.Host
+	return nil
+}
+
+// UnmarshalPB initializes the RemoveClusterNodeRequest from its protobuf representation.
+func (r *RemoveClusterNodeRequest) UnmarshalPB(v *pb.RemoveClusterNodeRequest) error {
+	r.Host = v.Host
+	return nil
 }
 
 // EditClusterRequest contains updates to the cluster definition
@@ -121,6 +197,7 @@ type EditClusterRequest struct {
 
 // MarshalPB converts the EditClusterRequest into its protobuf representation.
 func (r *EditClusterRequest) MarshalPB(v *pb.EditClusterRequest) error {
+	v.Host = r.Host
 	v.RemoveIDs = make([]uint32, 0, len(r.Remove))
 	for _, id := range r.Remove {
 		v.RemoveIDs = append(v.RemoveIDs, uint32(id))
@@ -130,6 +207,7 @@ func (r *EditClusterRequest) MarshalPB(v *pb.EditClusterRequest) error {
 
 // UnmarshalPB initializes the EditClusterRequest from its protobuf representation.
 func (r *EditClusterRequest) UnmarshalPB(v *pb.EditClusterRequest) error {
+	r.Host = v.Host
 	r.Remove = make([]int, 0, len(v.RemoveIDs))
 	for _, id := range v.RemoveIDs {
 		r.Remove = append(r.Remove, int(id))
@@ -147,17 +225,53 @@ type CreateEnclaveRequest struct {
 	Name string
 }
 
-// DescribeEnclaveRequest contains options for fetching metadata
+// MarshalPB converts the CreateEnclaveRequest into its protobuf representation.
+func (r *CreateEnclaveRequest) MarshalPB(v *pb.CreateEnclaveRequest) error {
+	v.Name = r.Name
+	return nil
+}
+
+// UnmarshalPB initializes the CreateEnclaveRequest from its protobuf representation.
+func (r *CreateEnclaveRequest) UnmarshalPB(v *pb.CreateEnclaveRequest) error {
+	r.Name = v.Name
+	return nil
+}
+
+// EnclaveStatusRequest contains options for fetching metadata
 // about an enclave.
-type DescribeEnclaveRequest struct {
+type EnclaveStatusRequest struct {
 	// Name is the name of the enclave to delete.
 	Name string
+}
+
+// MarshalPB converts the EnclaveStatusRequest into its protobuf representation.
+func (r *EnclaveStatusRequest) MarshalPB(v *pb.CreateEnclaveRequest) error {
+	v.Name = r.Name
+	return nil
+}
+
+// UnmarshalPB initializes the EnclaveStatusRequest from its protobuf representation.
+func (r *EnclaveStatusRequest) UnmarshalPB(v *pb.EnclaveStatusRequest) error {
+	r.Name = v.Name
+	return nil
 }
 
 // DeleteEnclaveRequest contains options for deleting enclaves.
 type DeleteEnclaveRequest struct {
 	// Name is the name of the enclave to delete.
 	Name string
+}
+
+// MarshalPB converts the DeleteEnclaveRequest into its protobuf representation.
+func (r *DeleteEnclaveRequest) MarshalPB(v *pb.DeleteEnclaveRequest) error {
+	v.Name = r.Name
+	return nil
+}
+
+// UnmarshalPB initializes the EnclaveStatusRequest from its protobuf representation.
+func (r *DeleteEnclaveRequest) UnmarshalPB(v *pb.DeleteEnclaveRequest) error {
+	r.Name = v.Name
+	return nil
 }
 
 // CreateKeyRequest contains options for creating secret keys.
@@ -183,13 +297,13 @@ type CreateKeyRequest struct {
 
 // MarshalPB converts the CreateKeyRequest into its protobuf representation.
 func (r *CreateKeyRequest) MarshalPB(v *pb.CreateKeyRequest) error {
-	if r.Type == 0 {
-		v.Type = nil
+	if r.Type != 0 {
+		v.Type = r.Type.String()
 	} else {
-		v.Type = new(string)
-		*v.Type = r.Type.String()
+		v.Type = ""
 	}
 
+	v.Name = r.Name
 	v.AddVersion = r.AddVersion
 	return nil
 }
@@ -197,7 +311,7 @@ func (r *CreateKeyRequest) MarshalPB(v *pb.CreateKeyRequest) error {
 // UnmarshalPB initializes the CreateKeyRequest from its protobuf representation.
 func (r *CreateKeyRequest) UnmarshalPB(v *pb.CreateKeyRequest) error {
 	var t SecretKeyType
-	if v.Type != nil {
+	if v.Type != "" {
 		var err error
 		t, err = secretKeyTypeFromString(v.GetType())
 		if err != nil {
@@ -205,6 +319,7 @@ func (r *CreateKeyRequest) UnmarshalPB(v *pb.CreateKeyRequest) error {
 		}
 	}
 
+	r.Name = v.Name
 	r.Type = t
 	r.AddVersion = v.AddVersion
 	return nil
@@ -233,14 +348,12 @@ type DeleteKeyRequest struct {
 
 // MarshalPB converts the DeleteKeyRequest into its protobuf representation.
 func (r *DeleteKeyRequest) MarshalPB(v *pb.DeleteKeyRequest) error {
-	switch {
-	case r.AllVersions && r.Version != 0:
+	if r.AllVersions && r.Version > 0 {
 		return errors.New("kms: invalid DeleteKeyRequest: all versions and non-zero version are incompatible")
-	case r.Version < 0:
-		v.Version = 0
-	default:
-		v.Version = uint32(r.Version)
 	}
+
+	v.Name = r.Name
+	v.Version = uint32(max(r.Version, 0))
 	v.AllVersions = r.AllVersions
 	return nil
 }
@@ -251,19 +364,38 @@ func (r *DeleteKeyRequest) UnmarshalPB(v *pb.DeleteKeyRequest) error {
 		return errors.New("kms: invalid DeleteKeyRequest: all versions and non-zero version are incompatible")
 	}
 
+	r.Name = v.Name
 	r.Version = int(v.Version)
 	r.AllVersions = v.AllVersions
 	return nil
 }
 
-// DescribeKeyVersionRequest contains options for fetching
+// KeyStatusRequest contains options for fetching
 // metadata about a key version.
-type DescribeKeyVersionRequest struct {
+type KeyStatusRequest struct {
 	// Enclave is the KMS enclave containing the master key.
 	Enclave string
 
 	// Name is the name of the master key.
 	Name string
+
+	// Version is the key version. If <= 0, refers to
+	// latest key version currently present.
+	Version int
+}
+
+// MarshalPB converts the KeyStatusRequest into its protobuf representation.
+func (r *KeyStatusRequest) MarshalPB(v *pb.KeyStatusRequest) error {
+	v.Name = r.Name
+	v.Version = uint32(max(r.Version, 0))
+	return nil
+}
+
+// UnmarshalPB initializes the KeyStatusRequest from its protobuf representation.
+func (r *KeyStatusRequest) UnmarshalPB(v *pb.KeyStatusRequest) error {
+	r.Name = v.Name
+	r.Version = int(v.Version)
+	return nil
 }
 
 // EncryptRequest contains a plaintext message that should be encrypted and
@@ -274,6 +406,11 @@ type EncryptRequest struct {
 
 	// Name is the name of the master key.
 	Name string
+
+	// Version is the key version used for encryption.
+	// If <= 0, refers to latest key version currently
+	// present.
+	Version int
 
 	// Plaintext is the plain message that is encrypted.
 	Plaintext []byte
@@ -289,6 +426,8 @@ type EncryptRequest struct {
 
 // MarshalPB converts the EncryptRequest into its protobuf representation.
 func (r *EncryptRequest) MarshalPB(v *pb.EncryptRequest) error {
+	v.Name = r.Name
+	v.Version = uint32(max(r.Version, 0))
 	v.Plaintext = r.Plaintext
 	v.AssociatedData = r.AssociatedData
 	return nil
@@ -296,6 +435,8 @@ func (r *EncryptRequest) MarshalPB(v *pb.EncryptRequest) error {
 
 // UnmarshalPB initializes the EncryptRequest from its protobuf representation.
 func (r *EncryptRequest) UnmarshalPB(v *pb.EncryptRequest) error {
+	r.Name = v.Name
+	r.Version = int(v.Version)
 	r.Plaintext = v.Plaintext
 	r.AssociatedData = v.AssociatedData
 	return nil
@@ -309,6 +450,8 @@ type GenerateKeyRequest struct {
 	// Name is the name of the master key.
 	Name string
 
+	Version int
+
 	// AssociatedData is additional data that is not encrypted but crypto. bound
 	// to the ciphertext of the data encryption key. The same associated data must
 	// be provided when decrypting the ciphertext.
@@ -316,7 +459,7 @@ type GenerateKeyRequest struct {
 	// Associated data should describe the context within the data encryption key
 	// is used. For example, the name of the file that gets encrypted with the
 	// data encryption key.
-	AssociateData []byte
+	AssociatedData []byte
 
 	// Length is an optional length of the generated plaintext data encryption key
 	// in bytes. At most 1024 (8192 bits). If <= 0, defaults to 32 (256 bits).
@@ -325,20 +468,19 @@ type GenerateKeyRequest struct {
 
 // MarshalPB converts the GenerateKeyRequest into its protobuf representation.
 func (r *GenerateKeyRequest) MarshalPB(v *pb.GenerateKeyRequest) error {
-	v.AssociatedData = r.AssociateData
-	if r.Length > 0 {
-		v.Length = new(uint32)
-		*v.Length = uint32(r.Length)
-	}
+	v.Name = r.Name
+	v.Version = uint32(max(r.Version, 0))
+	v.AssociatedData = r.AssociatedData
+	v.Length = uint32(max(r.Length, 0))
 	return nil
 }
 
 // UnmarshalPB initializes the GenerateKeyRequest from its protobuf representation.
 func (r *GenerateKeyRequest) UnmarshalPB(v *pb.GenerateKeyRequest) error {
-	r.AssociateData = v.AssociatedData
-	if v.Length != nil {
-		r.Length = int(*v.Length)
-	}
+	r.Name = v.Name
+	r.Version = int(v.Version)
+	r.AssociatedData = v.AssociatedData
+	r.Length = int(v.Length)
 	return nil
 }
 
@@ -359,22 +501,24 @@ type DecryptRequest struct {
 
 	// AssociatedData is additional data that has been crypto. bound to the
 	// ciphertext.
-	AssociateData []byte
+	AssociatedData []byte
 }
 
 // MarshalPB converts the DecryptKeyRequest into its protobuf representation.
 func (r *DecryptRequest) MarshalPB(v *pb.DecryptRequest) error {
+	v.Name = r.Name
 	v.Version = uint32(r.Version)
 	v.Ciphertext = r.Ciphertext
-	v.AssociatedData = r.AssociateData
+	v.AssociatedData = r.AssociatedData
 	return nil
 }
 
 // UnmarshalPB initializes the DecryptKeyRequest from its protobuf representation.
 func (r *DecryptRequest) UnmarshalPB(v *pb.DecryptRequest) error {
+	r.Name = v.Name
 	r.Version = int(v.Version)
 	r.Ciphertext = v.Ciphertext
-	r.AssociateData = v.AssociatedData
+	r.AssociatedData = v.AssociatedData
 	return nil
 }
 
@@ -387,36 +531,66 @@ type CreatePolicyRequest struct {
 	Name string
 
 	// Allow is a set of allow rules.
-	Allow map[string]Rule
+	Allow map[cmds.Command]RuleSet
 
 	// Deny is a set of deny rules.
-	Deny map[string]Rule
+	Deny map[cmds.Command]RuleSet
 }
 
 // MarshalPB converts the CreatePolicyRequest into its protobuf representation.
 func (r *CreatePolicyRequest) MarshalPB(v *pb.CreatePolicyRequest) error {
-	v.Allow = make(map[string]string, len(r.Allow))
-	for path, rule := range r.Allow {
-		v.Allow[path] = rule.String()
+	v.Name = r.Name
+
+	v.Allow = make(map[string]*pb.RuleSet, len(r.Allow))
+	for cmd, set := range r.Allow {
+		rs := new(pb.RuleSet)
+		if err := set.MarshalPB(rs); err != nil {
+			return err
+		}
+		v.Allow[cmd.String()] = rs
 	}
 
-	v.Deny = make(map[string]string, len(r.Deny))
-	for path, rule := range r.Deny {
-		v.Deny[path] = rule.String()
+	v.Deny = make(map[string]*pb.RuleSet, len(r.Deny))
+	for cmd, set := range r.Deny {
+		rs := new(pb.RuleSet)
+		if err := set.MarshalPB(rs); err != nil {
+			return err
+		}
+		v.Deny[cmd.String()] = rs
 	}
 	return nil
 }
 
 // UnmarshalPB initializes the CreatePolicyRequest from its protobuf representation.
 func (r *CreatePolicyRequest) UnmarshalPB(v *pb.CreatePolicyRequest) error {
-	r.Allow = make(map[string]Rule, len(v.Allow))
-	for path := range v.Allow {
-		r.Allow[path] = Rule{}
+	r.Name = v.Name
+
+	r.Allow = make(map[cmds.Command]RuleSet, len(v.Allow))
+	for cmd, set := range v.Allow {
+		var c cmds.Command
+		if err := c.UnmarshalText([]byte(cmd)); err != nil {
+			return err
+		}
+
+		var rs RuleSet
+		if err := rs.UnmarshalPB(set); err != nil {
+			return err
+		}
+		r.Allow[c] = rs
 	}
 
-	r.Deny = make(map[string]Rule, len(v.Deny))
-	for path := range v.Deny {
-		r.Deny[path] = Rule{}
+	r.Deny = make(map[cmds.Command]RuleSet, len(v.Deny))
+	for cmd, set := range v.Deny {
+		var c cmds.Command
+		if err := c.UnmarshalText([]byte(cmd)); err != nil {
+			return err
+		}
+
+		var rs RuleSet
+		if err := rs.UnmarshalPB(set); err != nil {
+			return err
+		}
+		r.Deny[c] = rs
 	}
 	return nil
 }
@@ -440,6 +614,7 @@ func (r *AssignPolicyRequest) MarshalPB(v *pb.AssignPolicyRequest) error {
 	}
 
 	v.Identity = r.Identity.String()
+	v.Policy = r.Policy
 	return nil
 }
 
@@ -450,6 +625,7 @@ func (r *AssignPolicyRequest) UnmarshalPB(v *pb.AssignPolicyRequest) error {
 	}
 
 	r.Identity = Identity(v.Identity)
+	r.Policy = v.Policy
 	return nil
 }
 
@@ -463,6 +639,18 @@ type PolicyRequest struct {
 	Name string
 }
 
+// MarshalPB converts the PolicyRequest into its protobuf representation.
+func (r *PolicyRequest) MarshalPB(v *pb.PolicyRequest) error {
+	v.Name = r.Name
+	return nil
+}
+
+// UnmarshalPB initializes the PolicyRequest from its protobuf representation.
+func (r *PolicyRequest) UnmarshalPB(v *pb.PolicyRequest) error {
+	r.Name = v.Name
+	return nil
+}
+
 // DeletePolicyRequest contains options for deleting a policy.
 type DeletePolicyRequest struct {
 	// Enclave is the KMS enclave containing the policy.
@@ -470,6 +658,18 @@ type DeletePolicyRequest struct {
 
 	// Name is the name of the policy that is deleted.
 	Name string
+}
+
+// MarshalPB converts the DeletePolicyRequest into its protobuf representation.
+func (r *DeletePolicyRequest) MarshalPB(v *pb.DeletePolicyRequest) error {
+	v.Name = r.Name
+	return nil
+}
+
+// UnmarshalPB initializes the DeletePolicyRequest from its protobuf representation.
+func (r *DeletePolicyRequest) UnmarshalPB(v *pb.DeletePolicyRequest) error {
+	r.Name = v.Name
+	return nil
 }
 
 // CreateIdentityRequest contains options for creating new identities.
@@ -495,6 +695,7 @@ func (r *CreateIdentityRequest) MarshalPB(v *pb.CreateIdentityRequest) error {
 		privilege = r.Privilege.String()
 	}
 
+	v.Identity = r.Identity.String()
 	v.Privilege = privilege
 	v.IsServiceAccount = r.IsServiceAccount
 	return nil
@@ -510,6 +711,7 @@ func (r *CreateIdentityRequest) UnmarshalPB(v *pb.CreateIdentityRequest) error {
 		}
 	}
 
+	r.Identity = Identity(v.Identity)
 	r.Privilege = privilege
 	r.IsServiceAccount = v.IsServiceAccount
 	return nil
@@ -524,6 +726,18 @@ type IdentityRequest struct {
 	Identity Identity
 }
 
+// MarshalPB converts the IdentityRequest into its protobuf representation.
+func (r *IdentityRequest) MarshalPB(v *pb.IdentityRequest) error {
+	v.Identity = r.Identity.String()
+	return nil
+}
+
+// UnmarshalPB initializes the IdentityRequest from its protobuf representation.
+func (r *IdentityRequest) UnmarshalPB(v *pb.IdentityRequest) error {
+	r.Identity = Identity(v.Identity)
+	return nil
+}
+
 // DeleteIdentityRequest contains options for deleting an identity.
 type DeleteIdentityRequest struct {
 	// Enclave is the KMS enclave containing the identity.
@@ -531,4 +745,16 @@ type DeleteIdentityRequest struct {
 
 	// Identity is the identity that is deleted.
 	Identity Identity
+}
+
+// MarshalPB converts the DeleteIdentityRequest into its protobuf representation.
+func (r *DeleteIdentityRequest) MarshalPB(v *pb.DeleteIdentityRequest) error {
+	v.Identity = r.Identity.String()
+	return nil
+}
+
+// UnmarshalPB initializes the DeleteIdentityRequest from its protobuf representation.
+func (r *DeleteIdentityRequest) UnmarshalPB(v *pb.DeleteIdentityRequest) error {
+	r.Identity = Identity(v.Identity)
+	return nil
 }

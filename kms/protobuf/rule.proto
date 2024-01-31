@@ -1,0 +1,20 @@
+// Copyright 2024 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
+// Generate the Go protobuf code by running the protobuf compiler
+// from the repository root:
+//
+//   $ protoc -I=./kms/protobuf --go_out=. ./kms/protobuf/*.proto
+
+syntax = "proto3";
+
+package minio.kms;
+
+option go_package = "kms/protobuf";
+
+message Rule {}
+
+message RuleSet {
+  map<string,Rule> Rules = 1 [ json_name = "rules" ];
+}

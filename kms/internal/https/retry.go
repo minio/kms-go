@@ -109,7 +109,7 @@ func (lb *LoadBalancer) Host() (string, error) {
 // succeeded before. It stops retrying once the request succeeds,
 // there are no more non-suspended hosts remaining or the retry limit
 // is reached.
-// Hosts for which requests fail are temporarily excluded and no longer
+// Hosts, for which requests fail, are temporarily excluded and no longer
 // selected for subsequent requests or retries.
 func (lb *LoadBalancer) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := lb.RoundTripper.RoundTrip(req)

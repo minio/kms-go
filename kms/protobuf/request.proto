@@ -13,38 +13,109 @@ package minio.kms;
 
 option go_package = "kms/protobuf";
 
+import "rule.proto";
+
+message ServerStatusRequest{}
+
+message ClusterStatusRequest {}
+
+message ListRequest {  
+	// Prefix is an optional prefix to start the listing from.
+	// For example, an application may want to list all keys
+	// starting with "foo", like "foo-1" and "foobar".
+	//
+	// Only elements with a name that match this prefix are
+	// returned by list operations. An empty prefix matches
+	// any name.
+	string Prefix = 1 [ json_name = "prefix" ];
+
+	// ContinueAt specifies an element name from where to
+	// continue a list operation. When listing a lot of
+	// elements, not all may fit into a single ListResponse.
+	// Applications can paginate through a long list of
+	// elements by setting a ContinueAt value.
+	//
+	// ContinueAt must match an element's name exactly.
+	// Using a ContinueAt value that does not start with
+	// the Prefix will lead to an empty listing result.
+	string ContinueAt = 2 [ json_name = "continue_at" ];
+
+	// Limit limits the number of elements returned by
+	// a list operation. If <= 0, no limit is specified
+	// and the server limits listing results to a
+	// reasonable max. size.
+  uint32 Limit = 3 [ json_name = "limit" ];
+}
+
+message AddClusterNodeRequest {
+  string Host = 1 [ json_name = "host" ];
+}
+
+message RemoveClusterNodeRequest {
+  string Host = 1 [ json_name = "host" ];
+}
+
 message EditClusterRequest {
+  string Host = 1 [ json_name = "host" ];
+
   // RemoveIDs is a list of KMS server IDs that are removed from
   // the cluster definition of the KMS server that receives the
   // request.
-  repeated uint32 RemoveIDs = 1 [ json_name = "remove" ];
+  repeated uint32 RemoveIDs = 2 [ json_name = "remove" ];
 }
 
+message CreateEnclaveRequest {
+    string Name = 1 [ json_name = "name" ];
+}
+
+message DeleteEnclaveRequest {
+    string Name = 1 [ json_name = "name" ];
+}
+
+message EnclaveStatusRequest {
+    string Name = 1 [ json_name = "name" ];
+}
+
+
 message CreateKeyRequest {
+  string Name = 1 [ json_name = "name" ];
+
   // Type is the type of the created key. If not set, the KMS server picks
   // a key type.
-  optional string Type = 1 [ json_name = "type" ];
+  string Type = 2 [ json_name = "type" ];
 
   // AddVersion indicates whether a new key version is created.
-  bool AddVersion = 2 [ json_name = "add_version" ];
+  bool AddVersion = 3 [ json_name = "add_version" ];
 }
 
 message DeleteKeyRequest {
+  string Name = 1 [ json_name = "name" ];
+
   // Version identifies the key version within the key ring to remove.
   // If zero, the latest key version is removed.
-  uint32 Version = 1 [ json_name = "version" ];
+  uint32 Version = 2 [ json_name = "version" ];
 
   // AllVersions indicates whether all key versions should be removed.
-  bool AllVersions = 2 [ json_name = "all_versions" ];
+  bool AllVersions = 3 [ json_name = "all_versions" ];
+}
+
+message KeyStatusRequest {
+  string Name = 1 [ json_name = "name" ];
+
+  // Version identifies the key version within the key ring.
+  // If zero, refers to the latest, most recent, key version.
+  uint32 Version = 2 [ json_name = "version" ];
 }
 
 message EncryptRequest {
+  string Name = 1 [ json_name = "name" ];
+
   // Version identifies the key version within the key ring used to encrypt
   // the plaintext. If zero, the latest key version is used.
-  uint32 Version = 1 [ json_name = "version" ];
+  uint32 Version = 2 [ json_name = "version" ];
 
   // Plaintext is the plain message that is encrypted.
-  bytes Plaintext = 2 [ json_name = "plaintext" ];
+  bytes Plaintext = 3 [ json_name = "plaintext" ];
 
   // AssociatedData is additional data that is not encrypted but crypto. bound
   // to the ciphertext. The same associated data must be provided when decrypting
@@ -52,13 +123,15 @@ message EncryptRequest {
   //
   // Associated data should describe the context of the plaintext data. For example,
   // the name of the file that gets encrypted.
-  bytes AssociatedData = 3 [ json_name = "associated_data" ];
+  bytes AssociatedData = 4 [ json_name = "associated_data" ];
 }
 
 message GenerateKeyRequest {
+  string Name = 1 [ json_name = "name" ];
+
   // Version identifies the key version within the key ring used to generate
   // the data encryption key. If zero, the latest key version is used.
-  uint32 Version = 1 [ json_name = "version" ];
+  uint32 Version = 2 [ json_name = "version" ];
 
   // AssociatedData is additional data that is not encrypted but crypto. bound
   // to the ciphertext of the data encryption key. The same associated data must
@@ -67,41 +140,66 @@ message GenerateKeyRequest {
   // Associated data should describe the context within the data encryption key
   // is used. For example, the name of the file that gets encrypted with the
   // data encryption key.
-  bytes AssociatedData = 2 [ json_name = "associated_data" ];
+  bytes AssociatedData = 3 [ json_name = "associated_data" ];
 
   // Length is the length of the generated plaintext data encryption key in bytes.
-  // At most 1024 (8192 bits). If not present, defaults to 32 (256 bits).
-  optional uint32 Length = 3 [ json_name = "length"];
+  // At most 1024 (8192 bits). If zero, defaults to 32 (256 bits).
+  uint32 Length = 4 [ json_name = "length"];
 }
 
 message DecryptRequest {
+  string Name = 1 [ json_name = "name" ];
+
   // Version identifies the key version within the key ring that should be
   // used to decrypt the ciphertext. Must not be zero.
-  uint32 Version = 1 [ json_name = "version" ];
+  uint32 Version = 2 [ json_name = "version" ];
 
   // Ciphertext is the encrypted message that gets decrypted.
-  bytes Ciphertext = 2 [ json_name = "ciphertext" ];
+  bytes Ciphertext = 3 [ json_name = "ciphertext" ];
 
   // AssociatedData is additional data that has been crypto. bound to the
   // ciphertext.
-  bytes AssociatedData = 3 [ json_name = "associated_data" ];
+  bytes AssociatedData = 4 [ json_name = "associated_data" ];
 }
 
 message CreatePolicyRequest {
-  map<string, string> Allow = 1 [ json_name = "allow" ];
-  map<string, string> Deny = 2 [ json_name = "deny" ];
+  string Name = 1 [ json_name = "name" ];
+
+  map<string, RuleSet> Allow = 2 [ json_name = "allow" ];
+
+  map<string, RuleSet> Deny = 3 [ json_name = "deny" ];
 }
 
+message PolicyRequest {
+  string Name = 1 [ json_name = "name" ];
+}
+
+message DeletePolicyRequest {
+  string Name = 1 [ json_name = "name" ];
+}
+  
 message AssignPolicyRequest {
 	// Identity is the identity to which the policy should apply.
   string Identity = 1 [ json_name = "identity" ];
+
+  string Policy = 2 [ json_name = "policy" ];
 }
 
 message CreateIdentityRequest {
+  string Identity = 1 [ json_name = "identity" ];
+  
   // Privilege is the privilege the identity has. Either, "SysAdmin", "Admin" or
   // "User".
-  string Privilege = 1 [ json_name = "privilege" ];
+  string Privilege = 2 [ json_name = "privilege" ];
 
   // IsServiceAccount indicates whether the identity is a service account.
-  bool IsServiceAccount = 2 [ json_name = "service_account" ];
+  bool IsServiceAccount = 3 [ json_name = "service_account" ];
+}
+
+message IdentityRequest {
+  string Identity = 1 [ json_name = "identity" ];
+}
+
+message DeleteIdentityRequest {
+  string Identity = 1 [ json_name = "identity" ];
 }
