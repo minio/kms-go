@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -122,6 +123,9 @@ type Client struct {
 	client http.Client // Client that uses the LB as RoundTripper
 	lb     *https.LoadBalancer
 }
+
+// Hosts returns a list of KMS servers currently used by client.
+func (c *Client) Hosts() []string { return slices.Clone(c.lb.Hosts) }
 
 // Send executes a KMS request, returning a Response for the provided
 // Request.
@@ -250,88 +254,6 @@ func (c *Client) Version(ctx context.Context, req *VersionRequest) ([]*VersionRe
 		go func(i int) {
 			defer wg.Done()
 			resps[i], errs[i] = version(ctx, endpoints[i])
-		}(i)
-	}
-	wg.Wait()
-
-	// Compact responses by filtering all nil values without alloc.
-	responses := resps[:0]
-	for _, r := range resps {
-		if r != nil {
-			responses = append(responses, r)
-		}
-	}
-	return responses[:len(responses):len(responses)], errors.Join(errs...)
-}
-
-// ServerStatus returns status information for one or multiple KMS servers.
-// If req.Hosts is empty, the Client tries to fetch status information
-// from all its hosts.
-//
-// For a single host, ServerStatus returns its status information and a
-// HostError wrapping the first error encountered, if any.
-//
-// For multiple hosts, ServerStatus returns a list of version responses.
-// If it fails to fetch status information from some hosts, it returns a
-// joined error that implements the "Unwrap() []error" interface. Each
-// of these errors are of type HostError.
-func (c *Client) ServerStatus(ctx context.Context, req *ServerStatusRequest) ([]*ServerStatusResponse, error) {
-	const (
-		Method      = http.MethodGet
-		Path        = api.PathHealthStatus
-		StatusOK    = http.StatusOK
-		ContentType = headers.ContentTypeAppAny // accept JSON or protobuf
-	)
-	status := func(ctx context.Context, endpoint string) (*ServerStatusResponse, error) {
-		url, err := url.JoinPath(httpsURL(endpoint), Path)
-		if err != nil {
-			return nil, hostError(endpoint, err)
-		}
-		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
-		if err != nil {
-			return nil, hostError(endpoint, err)
-		}
-		r.Header.Set(headers.Accept, ContentType)
-
-		resp, err := c.direct.Do(r)
-		if err != nil {
-			return nil, hostError(endpoint, err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != StatusOK {
-			return nil, hostError(endpoint, readError(resp))
-		}
-
-		var data ServerStatusResponse
-		if err := readResponse(resp, &data); err != nil {
-			return nil, hostError(endpoint, err)
-		}
-		return &data, nil
-	}
-
-	endpoints := req.Hosts
-	if len(endpoints) == 0 {
-		endpoints = c.lb.Hosts
-	}
-	if len(endpoints) == 1 {
-		resp, err := status(ctx, endpoints[0])
-		if err != nil {
-			return []*ServerStatusResponse{}, err
-		}
-		return []*ServerStatusResponse{resp}, nil
-	}
-
-	resps := make([]*ServerStatusResponse, len(endpoints))
-	errs := make([]error, len(endpoints))
-
-	var wg sync.WaitGroup
-	for i := range endpoints {
-		wg.Add(1)
-
-		go func(i int) {
-			defer wg.Done()
-			resps[i], errs[i] = status(ctx, endpoints[i])
 		}(i)
 	}
 	wg.Wait()
