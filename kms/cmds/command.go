@@ -23,12 +23,13 @@ const (
 
 	KeyCreate       Command = 201
 	KeyDelete       Command = 202
-	KeyStatus       Command = 203
-	KeyEncrypt      Command = 204
-	KeyDecrypt      Command = 205
-	KeyDataKey      Command = 206
-	KeyList         Command = 207
-	KeyListVersions Command = 208
+	KeyImport       Command = 203
+	KeyStatus       Command = 204
+	KeyEncrypt      Command = 205
+	KeyDecrypt      Command = 206
+	KeyGenerate     Command = 207
+	KeyList         Command = 208
+	KeyListVersions Command = 209
 
 	PolicyCreate Command = 301
 	PolicyDelete Command = 302
@@ -108,6 +109,7 @@ var isWrite = map[Command]struct{}{ // Commands that change state on a KMS serve
 
 	KeyCreate: {},
 	KeyDelete: {},
+	KeyImport: {},
 
 	PolicyCreate: {},
 	PolicyDelete: {},
@@ -133,7 +135,7 @@ var cmdTexts = map[Command]string{
 	KeyStatus:       "KEY:STATUS",
 	KeyEncrypt:      "KEY:ENCRYPT",
 	KeyDecrypt:      "KEY:DECRYPT",
-	KeyDataKey:      "KEY:DATAKEY",
+	KeyGenerate:     "KEY:GENERATE",
 	KeyList:         "KEY:LIST",
 	KeyListVersions: "KEY:LISTVERSIONS",
 
@@ -166,7 +168,7 @@ var textCmds = map[string]Command{
 	"KEY:STATUS":       KeyStatus,
 	"KEY:ENCRYPT":      KeyEncrypt,
 	"KEY:DECRYPT":      KeyDecrypt,
-	"KEY:DATAKEY":      KeyDataKey,
+	"KEY:GENERATE":     KeyGenerate,
 	"KEY:LIST":         KeyList,
 	"KEY:LISTVERSIONS": KeyListVersions,
 

@@ -722,6 +722,34 @@ func (c *Client) CreateKey(ctx context.Context, req *CreateKeyRequest) error {
 	return resp.Body.Close()
 }
 
+// ImportKey imports an existing key with the name req.Name into req.Enclave.
+// By default, a new key is created if and only if no such key exists. If
+// req.AddVersion is true, a new key version is added to an existing key.
+// The later is often referred to as key rotation.
+//
+// Keys that imported are marked by the KMS server to distinguish them from
+// keys that never left the KMS boundary.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyExists
+// if such a key already exists wrapped in a HostError.
+//
+// The returned error is of type *HostError.
+func (c *Client) ImportKey(ctx context.Context, req *ImportKeyRequest) error {
+	body, err := cmds.Encode(nil, cmds.KeyImport, req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.Send(ctx, &Request{
+		Enclave: req.Enclave,
+		Body:    body,
+	})
+	if err != nil {
+		return err
+	}
+	return resp.Body.Close()
+}
+
 // DescribeKeyVersion returns metadata about the key req.Name within
 // the req.Enclave.
 //
@@ -898,7 +926,7 @@ func (c *Client) Decrypt(ctx context.Context, req *DecryptRequest) (*DecryptResp
 //
 // The returned error is of type *HostError.
 func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*GenerateKeyResponse, error) {
-	body, err := cmds.Encode(nil, cmds.KeyDataKey, req)
+	body, err := cmds.Encode(nil, cmds.KeyGenerate, req)
 	if err != nil {
 		return nil, err
 	}
@@ -913,7 +941,7 @@ func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*Gen
 	defer resp.Body.Close()
 
 	var data GenerateKeyResponse
-	if err := decodeResponse(resp, cmds.KeyDataKey, &data); err != nil {
+	if err := decodeResponse(resp, cmds.KeyGenerate, &data); err != nil {
 		return nil, err
 	}
 	return &data, nil

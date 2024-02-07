@@ -442,7 +442,7 @@ func (r *KeyStatusResponse) MarshalPB(v *pb.KeyStatusResponse) error {
 
 // UnmarshalPB initializes the KeyStatusResponse from its protobuf representation.
 func (r *KeyStatusResponse) UnmarshalPB(v *pb.KeyStatusResponse) error {
-	t, err := secretKeyTypeFromString(v.Type)
+	t, err := ParseSecretKeyType(v.Type)
 	if err != nil {
 		return err
 	}

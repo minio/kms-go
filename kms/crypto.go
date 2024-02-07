@@ -9,6 +9,18 @@ import (
 	"strconv"
 )
 
+// ParseSecretKeyType returns a SecretKeyType from its string representation.
+func ParseSecretKeyType(s string) (SecretKeyType, error) {
+	switch s {
+	case "AES256":
+		return AES256, nil
+	case "ChaCha20":
+		return ChaCha20, nil
+	default:
+		return 0, fmt.Errorf("kms: key type '%s' is not supported", s)
+	}
+}
+
 // SecretKeyType defines the type of a secret key. Secret keys with
 // different types are not compatible since they may differ in the
 // encryption algorithm, key length, cipher mode, etc.
@@ -32,16 +44,5 @@ func (s SecretKeyType) String() string {
 		return "ChaCha20"
 	default:
 		return "!INVALID:" + strconv.Itoa(int(s))
-	}
-}
-
-func secretKeyTypeFromString(s string) (SecretKeyType, error) {
-	switch s {
-	case "AES256":
-		return AES256, nil
-	case "ChaCha20":
-		return ChaCha20, nil
-	default:
-		return 0, fmt.Errorf("kms: key type '%s' is not supported", s)
 	}
 }

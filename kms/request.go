@@ -313,7 +313,7 @@ func (r *CreateKeyRequest) UnmarshalPB(v *pb.CreateKeyRequest) error {
 	var t SecretKeyType
 	if v.Type != "" {
 		var err error
-		t, err = secretKeyTypeFromString(v.GetType())
+		t, err = ParseSecretKeyType(v.GetType())
 		if err != nil {
 			return err
 		}
@@ -322,6 +322,53 @@ func (r *CreateKeyRequest) UnmarshalPB(v *pb.CreateKeyRequest) error {
 	r.Name = v.Name
 	r.Type = t
 	r.AddVersion = v.AddVersion
+	return nil
+}
+
+// ImportKeyRequest contains options for importing secret keys.
+type ImportKeyRequest struct {
+	// Enclave is the KMS enclave in which the key is created.
+	Enclave string
+
+	// Name is the name of the key to create.
+	Name string
+
+	// Type of the key that is created. For example, AES256.
+	// If not set, the server will pick a key type.
+	Type SecretKeyType
+
+	// Key is the secret key imported into the KMS server.
+	// It must be a valid key for the given key type.
+	Key []byte
+}
+
+// MarshalPB converts the ImportKeyRequest into its protobuf representation.
+func (r *ImportKeyRequest) MarshalPB(v *pb.ImportKeyRequest) error {
+	if r.Type != 0 {
+		v.Type = r.Type.String()
+	} else {
+		v.Type = ""
+	}
+
+	v.Name = r.Name
+	v.Key = r.Key
+	return nil
+}
+
+// UnmarshalPB initializes the ImportKeyRequest from its protobuf representation.
+func (r *ImportKeyRequest) UnmarshalPB(v *pb.ImportKeyRequest) error {
+	var t SecretKeyType
+	if v.Type != "" {
+		var err error
+		t, err = ParseSecretKeyType(v.GetType())
+		if err != nil {
+			return err
+		}
+	}
+
+	r.Name = v.Name
+	r.Type = t
+	r.Key = v.Key
 	return nil
 }
 

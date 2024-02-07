@@ -15,8 +15,6 @@ option go_package = "kms/protobuf";
 
 import "rule.proto";
 
-message ServerStatusRequest{}
-
 message ClusterStatusRequest {}
 
 message ListRequest {  
@@ -86,6 +84,16 @@ message CreateKeyRequest {
 
   // AddVersion indicates whether a new key version is created.
   bool AddVersion = 3 [ json_name = "add_version" ];
+}
+
+message ImportKeyRequest {
+  string Name = 1 [ json_name = "name" ];
+
+  // Type is the type of the created key. If not set, the KMS server picks
+  // a key type.
+  string Type = 2 [ json_name = "type" ];
+
+  bytes Key = 3 [ json_name = "key" ];
 }
 
 message DeleteKeyRequest {
