@@ -5,7 +5,7 @@
 package kms
 
 import (
-	"bytes"
+	"cmp"
 	"encoding/json"
 	"slices"
 
@@ -25,7 +25,7 @@ type Rule struct{}
 // command argument matches the "my-key*" pattern.
 //
 // The RuleSet is the building block for KMS policies. Such a
-// policy defines which RuleSet is be applied for which KMS
+// policy defines which RuleSet is applied for which KMS
 // commands. For example, the RuleSet from above may be used
 // for the CreateKey command. In this case, the policy would
 // allow the creation of keys if and only if the key name
@@ -34,7 +34,8 @@ type Rule struct{}
 // A RuleSet can be represented as protobuf message or JSON
 // object. Usually, policies are defined in JSON to be human
 // readable. For ease of use, a RuleSet can not just be
-// represented as JSON object but also as JSON array. For
+// represented as JSON object but also as JSON array or JSON
+// string if the RuleSet contains just a single entry. For
 // example the following to JSON documents are decoded into
 // equal RuleSets:
 //
@@ -42,16 +43,19 @@ type Rule struct{}
 //
 //     {
 //     "my-key*": {},
-//     "sys-key": {}
 //     }
 //
 //  2. RuleSet as JSON array:
 //
-//     ["my-key*", "sys-key"]
+//     ["my-key*"]
 //
-// The 2nd form is shorter and easier to read than the 1st one.
-// However, the 1st one more accurately represenets the RuleSet's
-// in memory representation and allows future extensions.
+//  3. RuleSet as JSON string:
+//
+//     "my-key*"
+//
+// The 2nd and 3rd forms are shorter and easier to read than the
+// 1st one. However, the 1st one more accurately represenets the
+// RuleSet's in memory representation and allows future extensions.
 type RuleSet map[string]Rule
 
 // MarshalPB converts the RuleSet into its protobuf representation.
@@ -59,8 +63,11 @@ func (r *RuleSet) MarshalPB(v *pb.RuleSet) error {
 	rs := *r
 
 	v.Rules = make(map[string]*pb.Rule, len(rs))
-	for name := range rs {
-		v.Rules[name] = &pb.Rule{}
+	for pattern := range rs {
+		if pattern == "" {
+			continue
+		}
+		v.Rules[pattern] = &pb.Rule{}
 	}
 	return nil
 }
@@ -70,8 +77,11 @@ func (r *RuleSet) UnmarshalPB(v *pb.RuleSet) error {
 	*r = make(RuleSet, len(v.Rules))
 
 	rs := *r
-	for name := range v.Rules {
-		rs[name] = Rule{}
+	for pattern := range v.Rules {
+		if pattern == "" {
+			continue
+		}
+		rs[pattern] = Rule{}
 	}
 	return nil
 }
@@ -101,12 +111,23 @@ func (r RuleSet) MarshalJSON() ([]byte, error) {
 		}
 	}
 	if !hasRule {
-		names := make([]string, 0, len(r))
-		for name := range r {
-			names = append(names, name)
+		if len(r) == 1 {
+			for pattern := range r {
+				return json.Marshal(pattern)
+			}
 		}
-		slices.SortFunc(names, func(a, b string) int { return len(a) - len(b) })
-		return json.Marshal(names)
+
+		patterns := make([]string, 0, len(r))
+		for pattern := range r {
+			patterns = append(patterns, pattern)
+		}
+		slices.SortFunc(patterns, func(a, b string) int {
+			if n := len(a) - len(b); n != 0 {
+				return n
+			}
+			return cmp.Compare(a, b)
+		})
+		return json.Marshal(patterns)
 	}
 	return json.Marshal(map[string]Rule(r))
 }
@@ -118,15 +139,29 @@ func (r RuleSet) MarshalJSON() ([]byte, error) {
 // containing the patterns as strings and the Rules as
 // JSON objects.
 func (r *RuleSet) UnmarshalJSON(b []byte) error {
-	if bytes.HasPrefix(b, []byte{'['}) && bytes.HasSuffix(b, []byte{']'}) {
-		var names []string
-		if err := json.Unmarshal(b, &names); err != nil {
+	if n := len(b); n >= 2 && b[0] == '"' && b[n-1] == '"' {
+		var pattern string
+		if err := json.Unmarshal(b, &pattern); err != nil {
+			return err
+		}
+		if pattern == "" {
+			*r = RuleSet{}
+		} else {
+			*r = RuleSet{pattern: {}}
+		}
+		return nil
+	}
+	if n := len(b); n >= 2 && b[0] == '[' && b[n-1] == ']' {
+		var patterns []string
+		if err := json.Unmarshal(b, &patterns); err != nil {
 			return err
 		}
 
-		m := make(RuleSet, len(names))
-		for _, name := range names {
-			m[name] = Rule{}
+		m := make(RuleSet, len(patterns))
+		for _, pattern := range patterns {
+			if pattern != "" {
+				m[pattern] = Rule{}
+			}
 		}
 		*r = m
 		return nil
@@ -135,6 +170,11 @@ func (r *RuleSet) UnmarshalJSON(b []byte) error {
 	m := map[string]Rule{}
 	if err := json.Unmarshal(b, &m); err != nil {
 		return err
+	}
+	for pattern := range m {
+		if pattern == "" {
+			delete(m, pattern)
+		}
 	}
 	*r = RuleSet(m)
 	return nil

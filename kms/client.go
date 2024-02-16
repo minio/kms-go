@@ -69,7 +69,7 @@ func NewClient(conf *Config) (*Client, error) {
 		if err != nil {
 			return nil, err
 		}
-		tlsConf.GetClientCertificate = func(cri *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		tlsConf.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			return &cert, nil
 		}
 	}
