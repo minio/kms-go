@@ -65,7 +65,7 @@ func NewClient(conf *Config) (*Client, error) {
 
 	tlsConf := conf.TLS.Clone()
 	if conf.APIKey != nil {
-		cert, err := generateCertificate(conf.APIKey)
+		cert, err := GenerateCertificate(conf.APIKey)
 		if err != nil {
 			return nil, err
 		}
@@ -1229,7 +1229,11 @@ func httpsURL(endpoint string) string {
 	return endpoint
 }
 
-func generateCertificate(key APIKey) (tls.Certificate, error) {
+// GenerateCertificate generates a new tls.Certificate from the APIKey's
+// private and public key.
+//
+// By default, the returned certificate is valid for 90 days.
+func GenerateCertificate(key APIKey) (tls.Certificate, error) {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
