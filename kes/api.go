@@ -33,7 +33,7 @@ func (s State) MarshalJSON() ([]byte, error) {
 		Version             string        `json:"version,omitempty"`
 		OS                  string        `json:"os,omitempty"`
 		Arch                string        `json:"arch,omitempty"`
-		UpTime              time.Duration `json:"uptime,omitempty"`
+		UpTime              float64       `json:"uptime,omitempty"`
 		CPUs                int           `json:"num_cpu,omitempty"`
 		UsableCPUs          int           `json:"num_cpu_used,omitempty"`
 		HeapAlloc           uint64        `json:"mem_heap_used,omitempty"`
@@ -55,7 +55,7 @@ func (s State) MarshalJSON() ([]byte, error) {
 		Version:             s.Version,
 		OS:                  s.OS,
 		Arch:                s.Arch,
-		UpTime:              s.UpTime,
+		UpTime:              s.UpTime.Round(time.Second).Seconds(),
 		CPUs:                s.CPUs,
 		UsableCPUs:          s.UsableCPUs,
 		HeapAlloc:           s.HeapAlloc,
@@ -72,7 +72,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 		Version             string        `json:"version"`
 		OS                  string        `json:"os"`
 		Arch                string        `json:"arch"`
-		UpTime              time.Duration `json:"uptime"`
+		UpTime              float64       `json:"uptime"`
 		CPUs                int           `json:"num_cpu"`
 		UsableCPUs          int           `json:"num_cpu_used"`
 		HeapAlloc           uint64        `json:"mem_heap_used"`
@@ -99,7 +99,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 	s.Version = v.Version
 	s.OS = v.OS
 	s.Arch = v.Arch
-	s.UpTime = v.UpTime
+	s.UpTime = time.Duration(v.UpTime * float64(time.Second))
 	s.CPUs = v.CPUs
 	s.UsableCPUs = v.UsableCPUs
 	s.HeapAlloc = v.HeapAlloc
