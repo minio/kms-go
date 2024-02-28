@@ -27,6 +27,7 @@ import (
 	"github.com/minio/kms-go/kms/internal/api"
 	"github.com/minio/kms-go/kms/internal/headers"
 	"github.com/minio/kms-go/kms/internal/https"
+	"github.com/minio/kms-go/kms/internal/pool"
 	pb "github.com/minio/kms-go/kms/protobuf"
 )
 
@@ -430,11 +431,11 @@ func (c *Client) ClusterStatus(ctx context.Context, _ *ClusterStatusRequest) (*C
 	}
 	defer resp.Body.Close()
 
-	var data ClusterStatusResponse
-	if err := decodeResponse(resp, cmds.ClusterStatus, &data); err != nil {
+	data, err := decodeResponse[pb.ClusterStatusResponse, ClusterStatusResponse](resp, cmds.ClusterStatus)
+	if err != nil {
 		return nil, err
 	}
-	return &data, nil
+	return data[0], nil
 }
 
 // EditCluster edits the cluster definition of the KMS server req.Host.
@@ -601,34 +602,37 @@ func (c *Client) CreateEnclave(ctx context.Context, req *CreateEnclaveRequest) e
 	return resp.Body.Close()
 }
 
-// DescribeEnclave returns metadata about the enclave with the
-// the name req.Name.
+// EnclaveStatus returns status information about one or multiple enclaves.
+// Without any requests, EnclaveStatus returns an empty slice and no error.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists
-// wrapped in a HostError.
+// The returned error is of type *HostError. If one of the requested enclaves
+// does not exist, EnclaveStatus returns ErrEnclaveNotFound wrapped in a HostError.
 //
-// It requires SysAdmin privileges.
-//
-// The returned error is of type *HostError.
-func (c *Client) DescribeEnclave(ctx context.Context, req *EnclaveStatusRequest) (*EnclaveStatusResponse, error) {
-	body, err := cmds.Encode(nil, cmds.EnclaveStatus, req)
-	if err != nil {
-		return nil, err
+// Fetching enclave status information requires SysAdmin privileges.
+func (c *Client) EnclaveStatus(ctx context.Context, reqs ...*EnclaveStatusRequest) ([]*EnclaveStatusResponse, error) {
+	if len(reqs) == 0 {
+		return []*EnclaveStatusResponse{}, nil
 	}
 
-	resp, err := c.Send(ctx, &Request{
-		Body: body,
-	})
+	p := pool.Get(128 * len(reqs))
+	defer pool.Put(p)
+
+	body := (*p)[:0]
+	for _, req := range reqs {
+		var err error
+		body, err = cmds.Encode(body, cmds.EnclaveStatus, req)
+		if err != nil {
+			return nil, hostError("", err)
+		}
+	}
+
+	resp, err := c.Send(ctx, &Request{Body: body})
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	var data EnclaveStatusResponse
-	if err := decodeResponse(resp, cmds.EnclaveStatus, &data); err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return decodeResponse[pb.EnclaveStatusResponse, EnclaveStatusResponse](resp, cmds.EnclaveStatus)
 }
 
 // DeleteEnclave deletes the enclave with the name req.Name.
@@ -750,21 +754,33 @@ func (c *Client) ImportKey(ctx context.Context, req *ImportKeyRequest) error {
 	return resp.Body.Close()
 }
 
-// DescribeKeyVersion returns metadata about the key req.Name within
-// the req.Enclave.
+// KeyStatus returns status information about one or multiple keys
+// within the enclave. Without any requests, KeyStatus returns an
+// empty slice and no error.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrKeyNotFound if no such key exists wrapped in a HostError.
-//
-// The returned error is of type *HostError.
-func (c *Client) DescribeKeyVersion(ctx context.Context, req *KeyStatusRequest) (*KeyStatusResponse, error) {
-	body, err := cmds.Encode(nil, cmds.KeyStatus, req)
-	if err != nil {
-		return nil, err
+// The returned error is of type *HostError. If the enclave does not
+// exist, KeyStatus returns ErrEnclaveNotFound wrapped in a HostError.
+// Similarly, if at least one key does not exist, KeyStatus returns
+// ErrKeyNotFound wrapped in a HostError.
+func (c *Client) KeyStatus(ctx context.Context, enclave string, reqs ...*KeyStatusRequest) ([]*KeyStatusResponse, error) {
+	if len(reqs) == 0 {
+		return []*KeyStatusResponse{}, nil
+	}
+
+	p := pool.Get(128 * len(reqs))
+	defer pool.Put(p)
+
+	body := (*p)[:0]
+	for _, req := range reqs {
+		var err error
+		body, err = cmds.Encode(body, cmds.KeyStatus, req)
+		if err != nil {
+			return nil, hostError("", err)
+		}
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -772,11 +788,7 @@ func (c *Client) DescribeKeyVersion(ctx context.Context, req *KeyStatusRequest) 
 	}
 	defer resp.Body.Close()
 
-	var data KeyStatusResponse
-	if err := decodeResponse(resp, cmds.KeyStatus, &data); err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return decodeResponse[pb.KeyStatusResponse, KeyStatusResponse](resp, cmds.KeyStatus)
 }
 
 // DeleteKey deletes the key with the version req.Version from the key ring
@@ -853,14 +865,25 @@ func (c *Client) ListKeys(ctx context.Context, req *ListRequest) (*Page[KeyStatu
 // ErrKeyNotFound if no such key exists wrapped in a HostError.
 //
 // The returned error is of type *HostError.
-func (c *Client) Encrypt(ctx context.Context, req *EncryptRequest) (*EncryptResponse, error) {
-	body, err := cmds.Encode(nil, cmds.KeyEncrypt, req)
-	if err != nil {
-		return nil, err
+func (c *Client) Encrypt(ctx context.Context, enclave string, reqs ...*EncryptRequest) ([]*EncryptResponse, error) {
+	if len(reqs) == 0 {
+		return []*EncryptResponse{}, nil
+	}
+
+	p := pool.Get(128 * len(reqs))
+	defer pool.Put(p)
+
+	body := (*p)[:0]
+	for _, req := range reqs {
+		var err error
+		body, err = cmds.Encode(body, cmds.KeyEncrypt, req)
+		if err != nil {
+			return nil, hostError("", err)
+		}
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -868,11 +891,7 @@ func (c *Client) Encrypt(ctx context.Context, req *EncryptRequest) (*EncryptResp
 	}
 	defer resp.Body.Close()
 
-	var data EncryptResponse
-	if err := decodeResponse(resp, cmds.KeyEncrypt, &data); err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return decodeResponse[pb.EncryptResponse, EncryptResponse](resp, cmds.KeyStatus)
 }
 
 // Decrypt decrypts the req.Ciphertext with the key req.Name within
@@ -882,14 +901,25 @@ func (c *Client) Encrypt(ctx context.Context, req *EncryptRequest) (*EncryptResp
 // ErrKeyNotFound if no such key exists wrapped in a HostError.
 //
 // The returned error is of type *HostError.
-func (c *Client) Decrypt(ctx context.Context, req *DecryptRequest) (*DecryptResponse, error) {
-	body, err := cmds.Encode(nil, cmds.KeyDecrypt, req)
-	if err != nil {
-		return nil, err
+func (c *Client) Decrypt(ctx context.Context, enclave string, reqs ...*DecryptRequest) ([]*DecryptResponse, error) {
+	if len(reqs) == 0 {
+		return []*DecryptResponse{}, nil
+	}
+
+	p := pool.Get(128 * len(reqs))
+	defer pool.Put(p)
+
+	body := (*p)[:0]
+	for _, req := range reqs {
+		var err error
+		body, err = cmds.Encode(body, cmds.KeyDecrypt, req)
+		if err != nil {
+			return nil, hostError("", err)
+		}
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -897,11 +927,7 @@ func (c *Client) Decrypt(ctx context.Context, req *DecryptRequest) (*DecryptResp
 	}
 	defer resp.Body.Close()
 
-	var data DecryptResponse
-	if err := decodeResponse(resp, cmds.KeyDecrypt, &data); err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return decodeResponse[pb.DecryptResponse, DecryptResponse](resp, cmds.KeyDecrypt)
 }
 
 // GenerateKey generates a new unique data encryption key. The returned
@@ -925,14 +951,25 @@ func (c *Client) Decrypt(ctx context.Context, req *DecryptRequest) (*DecryptResp
 // ErrKeyNotFound if no such key exists wrapped in a HostError.
 //
 // The returned error is of type *HostError.
-func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*GenerateKeyResponse, error) {
-	body, err := cmds.Encode(nil, cmds.KeyGenerate, req)
-	if err != nil {
-		return nil, err
+func (c *Client) GenerateKey(ctx context.Context, enclave string, reqs ...*GenerateKeyRequest) ([]*GenerateKeyResponse, error) {
+	if len(reqs) == 0 {
+		return []*GenerateKeyResponse{}, nil
+	}
+
+	p := pool.Get(128 * len(reqs))
+	defer pool.Put(p)
+
+	body := (*p)[:0]
+	for _, req := range reqs {
+		var err error
+		body, err = cmds.Encode(body, cmds.KeyGenerate, req)
+		if err != nil {
+			return nil, hostError("", err)
+		}
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -940,11 +977,7 @@ func (c *Client) GenerateKey(ctx context.Context, req *GenerateKeyRequest) (*Gen
 	}
 	defer resp.Body.Close()
 
-	var data GenerateKeyResponse
-	if err := decodeResponse(resp, cmds.KeyGenerate, &data); err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return decodeResponse[pb.GenerateKeyResponse, GenerateKeyResponse](resp, cmds.KeyGenerate)
 }
 
 // CreatePolicy creates a new or overwrites an exisiting policy with the
@@ -990,20 +1023,33 @@ func (c *Client) AssignPolicy(ctx context.Context, req *AssignPolicyRequest) err
 	return resp.Body.Close()
 }
 
-// DescribePolicy returns metadata about the policy req.Name within
-// the req.Enclave.
+// PolicyStatus returns status information about one or multiple policies
+// within the enclave. Without any requests, PolicyStatus returns an empty
+// slice and no error.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrPolicyNotFound if no such policy exists wrapped in a
-// HostError. The returned error is of type *HostError.
-func (c *Client) DescribePolicy(ctx context.Context, req *PolicyRequest) (*PolicyStatusResponse, error) {
-	body, err := cmds.Encode(nil, cmds.PolicyStatus, req)
-	if err != nil {
-		return nil, err
+// The returned error is of type *HostError. If the enclave does not
+// exist, PolicyStatus returns ErrEnclaveNotFound wrapped in a HostError.
+// Similarly, if at least one policy does not exist, PolicyStatus returns
+// ErrPolicyNotFound wrapped in a HostError.
+func (c *Client) PolicyStatus(ctx context.Context, enclave string, reqs ...*PolicyRequest) ([]*PolicyStatusResponse, error) {
+	if len(reqs) == 0 {
+		return []*PolicyStatusResponse{}, nil
+	}
+
+	p := pool.Get(128 * len(reqs))
+	defer pool.Put(p)
+
+	body := (*p)[:0]
+	for _, req := range reqs {
+		var err error
+		body, err = cmds.Encode(body, cmds.PolicyStatus, req)
+		if err != nil {
+			return nil, hostError("", err)
+		}
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -1011,26 +1057,36 @@ func (c *Client) DescribePolicy(ctx context.Context, req *PolicyRequest) (*Polic
 	}
 	defer resp.Body.Close()
 
-	var data PolicyStatusResponse
-	if err := decodeResponse(resp, cmds.PolicyStatus, &data); err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return decodeResponse[pb.PolicyStatusResponse, PolicyStatusResponse](resp, cmds.PolicyStatus)
 }
 
-// GetPolicy fetches the policy req.Name within the req.Enclave.
+// GetPolicy returns one or multiple policies within the enclave.
+// Without any requests, PolicyStatus returns an empty slice and
+// no error.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrPolicyNotFound if no such policy exists wrapped in a
-// HostError. The returned error is of type *HostError.
-func (c *Client) GetPolicy(ctx context.Context, req *PolicyRequest) (*PolicyResponse, error) {
-	body, err := cmds.Encode(nil, cmds.PolicyGet, req)
-	if err != nil {
-		return nil, err
+// The returned error is of type *HostError. If the enclave does not
+// exist, GetPolicy returns ErrEnclaveNotFound wrapped in a HostError.
+// Similarly, if at least one policy does not exist, GetPolicy returns
+// ErrPolicyNotFound wrapped in a HostError.
+func (c *Client) GetPolicy(ctx context.Context, enclave string, reqs ...*PolicyRequest) ([]*PolicyResponse, error) {
+	if len(reqs) == 0 {
+		return []*PolicyResponse{}, nil
+	}
+
+	p := pool.Get(128 * len(reqs))
+	defer pool.Put(p)
+
+	body := (*p)[:0]
+	for _, req := range reqs {
+		var err error
+		body, err = cmds.Encode(body, cmds.PolicyGet, req)
+		if err != nil {
+			return nil, hostError("", err)
+		}
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -1038,11 +1094,7 @@ func (c *Client) GetPolicy(ctx context.Context, req *PolicyRequest) (*PolicyResp
 	}
 	defer resp.Body.Close()
 
-	var data PolicyResponse
-	if err := decodeResponse(resp, cmds.PolicyGet, &data); err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return decodeResponse[pb.PolicyResponse, PolicyResponse](resp, cmds.PolicyGet)
 }
 
 // DeletePolicy deletes the policy with the name req.Name within req.Enclave.
@@ -1129,19 +1181,33 @@ func (c *Client) CreateIdentity(ctx context.Context, req *CreateIdentityRequest)
 	return resp.Body.Close()
 }
 
-// GetIdentity returns identity req.Identity within the req.Enclave.
+// GetIdentity returns information about one or multiple identities
+// within the req.Enclave. Without any requests, GetIdentity returns
+// an empty slice and no error.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrIdentityNotFound if no such identity exists wrapped in a
-// HostError. The returned error is of type *HostError.
-func (c *Client) GetIdentity(ctx context.Context, req *IdentityRequest) (*IdentityResponse, error) {
-	body, err := cmds.Encode(nil, cmds.IdentityGet, req)
-	if err != nil {
-		return nil, err
+// The returned error is of type *HostError. If the enclave does not
+// exist, GetIdentity returns ErrEnclaveNotFound wrapped in a HostError.
+// Similarly, if at least one policy does not exist, GetIdentity returns
+// ErrIdentityNotFound wrapped in a HostError.
+func (c *Client) GetIdentity(ctx context.Context, enclave string, reqs ...*IdentityRequest) ([]*IdentityResponse, error) {
+	if len(reqs) == 0 {
+		return []*IdentityResponse{}, nil
+	}
+
+	p := pool.Get(128 * len(reqs))
+	defer pool.Put(p)
+
+	body := (*p)[:0]
+	for _, req := range reqs {
+		var err error
+		body, err = cmds.Encode(body, cmds.IdentityGet, req)
+		if err != nil {
+			return nil, hostError("", err)
+		}
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -1149,11 +1215,7 @@ func (c *Client) GetIdentity(ctx context.Context, req *IdentityRequest) (*Identi
 	}
 	defer resp.Body.Close()
 
-	var data IdentityResponse
-	if err := decodeResponse(resp, cmds.IdentityGet, &data); err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return decodeResponse[pb.IdentityResponse, IdentityResponse](resp, cmds.IdentityGet)
 }
 
 // DeleteIdentity deletes the identity with the name req.Identity within req.Enclave.
