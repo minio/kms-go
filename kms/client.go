@@ -701,23 +701,28 @@ func (c *Client) ListEnclaves(ctx context.Context, req *ListRequest) (*Page[Encl
 	return ls, nil
 }
 
-// CreateKey creates a new key with the name req.Name within req.Enclave.
-// By default, a new key is created if and only if no such key exists. If
-// req.AddVersion is true, a new key version is added to an existing key.
-// The later is often referred to as key rotation.
+// CreateKey creates a new key with the name req.Name within the given
+// enclave. By default, a new key is created if and only if no such key
+// exists. However, if req.AddVersion is set, a new key version is added
+// to an existing key.
+//
+// Adding new key versions is often also referred to as key rotation.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyExists
-// if such a key already exists wrapped in a HostError.
+// if such a key already exists, wrapped in a HostError.
 //
 // The returned error is of type *HostError.
-func (c *Client) CreateKey(ctx context.Context, req *CreateKeyRequest) error {
-	body, err := cmds.Encode(nil, cmds.KeyCreate, req)
+func (c *Client) CreateKey(ctx context.Context, enclave string, req *CreateKeyRequest) error {
+	p := pool.Get(128)
+	defer pool.Put(p)
+
+	body, err := cmds.Encode((*p)[:0], cmds.KeyCreate, req)
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -726,26 +731,25 @@ func (c *Client) CreateKey(ctx context.Context, req *CreateKeyRequest) error {
 	return resp.Body.Close()
 }
 
-// ImportKey imports an existing key with the name req.Name into req.Enclave.
-// By default, a new key is created if and only if no such key exists. If
-// req.AddVersion is true, a new key version is added to an existing key.
-// The later is often referred to as key rotation.
-//
-// Keys that imported are marked by the KMS server to distinguish them from
-// keys that never left the KMS boundary.
+// ImportKey imports an existing key with the name req.Name into the given
+// enclave. Imported keys are marked by the KMS server to distinguish them
+// from keys that never left the KMS boundary.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyExists
 // if such a key already exists wrapped in a HostError.
 //
 // The returned error is of type *HostError.
-func (c *Client) ImportKey(ctx context.Context, req *ImportKeyRequest) error {
-	body, err := cmds.Encode(nil, cmds.KeyImport, req)
+func (c *Client) ImportKey(ctx context.Context, enclave string, req *ImportKeyRequest) error {
+	p := pool.Get(128)
+	defer pool.Put(p)
+
+	body, err := cmds.Encode((*p)[:0], cmds.KeyImport, req)
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -792,22 +796,25 @@ func (c *Client) KeyStatus(ctx context.Context, enclave string, reqs ...*KeyStat
 }
 
 // DeleteKey deletes the key with the version req.Version from the key ring
-// with the name req.Name within req.Enclave. It deletes the latest key
+// with the name req.Name within the enclave. It deletes the latest key
 // version if no key version is specified and the entire key and all versions
-// if req.AllVersions is true.
+// if req.AllVersions is set.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyNotFound
-// if such key or key version exists wrapped in a HostError.
+// if such key or key version exists, wrapped in a HostError.
 //
 // The returned error is of type *HostError.
-func (c *Client) DeleteKey(ctx context.Context, req *DeleteKeyRequest) error {
-	body, err := cmds.Encode(nil, cmds.KeyDelete, req)
+func (c *Client) DeleteKey(ctx context.Context, enclave string, req *DeleteKeyRequest) error {
+	p := pool.Get(128)
+	defer pool.Put(p)
+
+	body, err := cmds.Encode((*p)[:0], cmds.KeyDelete, req)
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -862,7 +869,7 @@ func (c *Client) ListKeys(ctx context.Context, req *ListRequest) (*Page[KeyStatu
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrKeyNotFound if no such key exists wrapped in a HostError.
+// ErrKeyNotFound if no such key exists, wrapped in a HostError.
 //
 // The returned error is of type *HostError.
 func (c *Client) Encrypt(ctx context.Context, enclave string, reqs ...*EncryptRequest) ([]*EncryptResponse, error) {
@@ -898,7 +905,7 @@ func (c *Client) Encrypt(ctx context.Context, enclave string, reqs ...*EncryptRe
 // the req.Enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrKeyNotFound if no such key exists wrapped in a HostError.
+// ErrKeyNotFound if no such key exists, wrapped in a HostError.
 //
 // The returned error is of type *HostError.
 func (c *Client) Decrypt(ctx context.Context, enclave string, reqs ...*DecryptRequest) ([]*DecryptResponse, error) {
@@ -948,7 +955,7 @@ func (c *Client) Decrypt(ctx context.Context, enclave string, reqs ...*DecryptRe
 // for future key rotation.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and
-// ErrKeyNotFound if no such key exists wrapped in a HostError.
+// ErrKeyNotFound if no such key exists, wrapped in a HostError.
 //
 // The returned error is of type *HostError.
 func (c *Client) GenerateKey(ctx context.Context, enclave string, reqs ...*GenerateKeyRequest) ([]*GenerateKeyResponse, error) {
@@ -981,18 +988,21 @@ func (c *Client) GenerateKey(ctx context.Context, enclave string, reqs ...*Gener
 }
 
 // CreatePolicy creates a new or overwrites an exisiting policy with the
-// name req.Name within req.Enclave.
+// name req.Name within the given enclave.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists wrapped in a
+// It returns ErrEnclaveNotFound if no such enclave exists, wrapped in a
 // HostError. The returned error is of type *HostError.
-func (c *Client) CreatePolicy(ctx context.Context, req *CreatePolicyRequest) error {
-	body, err := cmds.Encode(nil, cmds.PolicyCreate, req)
+func (c *Client) CreatePolicy(ctx context.Context, enclave string, req *CreatePolicyRequest) error {
+	p := pool.Get(128)
+	defer pool.Put(p)
+
+	body, err := cmds.Encode((*p)[:0], cmds.PolicyCreate, req)
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -1001,20 +1011,23 @@ func (c *Client) CreatePolicy(ctx context.Context, req *CreatePolicyRequest) err
 	return resp.Body.Close()
 }
 
-// AssignPolicy assigns the req.Policy within req.Enclave to the req.Identity.
+// AssignPolicy assigns the req.Policy within the enclave to the req.Identity.
 // Both, the policy and identity, must reside within the same enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists, ErrPolicyNotFound
-// if no such policy exists and ErrIdentityNotFound if no such identity exists
+// if no such policy exists and ErrIdentityNotFound if no such identity exists,
 // wrapped in a HostError. The returned error is of type *HostError.
-func (c *Client) AssignPolicy(ctx context.Context, req *AssignPolicyRequest) error {
-	body, err := cmds.Encode(nil, cmds.PolicyAssign, req)
+func (c *Client) AssignPolicy(ctx context.Context, enclave string, req *AssignPolicyRequest) error {
+	p := pool.Get(128)
+	defer pool.Put(p)
+
+	body, err := cmds.Encode((*p)[:0], cmds.PolicyAssign, req)
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -1028,7 +1041,7 @@ func (c *Client) AssignPolicy(ctx context.Context, req *AssignPolicyRequest) err
 // slice and no error.
 //
 // The returned error is of type *HostError. If the enclave does not
-// exist, PolicyStatus returns ErrEnclaveNotFound wrapped in a HostError.
+// exist, PolicyStatus returns ErrEnclaveNotFound, wrapped in a HostError.
 // Similarly, if at least one policy does not exist, PolicyStatus returns
 // ErrPolicyNotFound wrapped in a HostError.
 func (c *Client) PolicyStatus(ctx context.Context, enclave string, reqs ...*PolicyRequest) ([]*PolicyStatusResponse, error) {
@@ -1065,7 +1078,7 @@ func (c *Client) PolicyStatus(ctx context.Context, enclave string, reqs ...*Poli
 // no error.
 //
 // The returned error is of type *HostError. If the enclave does not
-// exist, GetPolicy returns ErrEnclaveNotFound wrapped in a HostError.
+// exist, GetPolicy returns ErrEnclaveNotFound, wrapped in a HostError.
 // Similarly, if at least one policy does not exist, GetPolicy returns
 // ErrPolicyNotFound wrapped in a HostError.
 func (c *Client) GetPolicy(ctx context.Context, enclave string, reqs ...*PolicyRequest) ([]*PolicyResponse, error) {
@@ -1097,19 +1110,22 @@ func (c *Client) GetPolicy(ctx context.Context, enclave string, reqs ...*PolicyR
 	return decodeResponse[pb.PolicyResponse, PolicyResponse](resp, cmds.PolicyGet)
 }
 
-// DeletePolicy deletes the policy with the name req.Name within req.Enclave.
+// DeletePolicy deletes the policy with the name req.Name within the enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrPolicyNotFound
-// if such policy exists wrapped in a HostError. The returned error is of type
+// if such policy exists, wrapped in a HostError. The returned error is of type
 // *HostError.
-func (c *Client) DeletePolicy(ctx context.Context, req *DeletePolicyRequest) error {
-	body, err := cmds.Encode(nil, cmds.PolicyDelete, req)
+func (c *Client) DeletePolicy(ctx context.Context, enclave string, req *DeletePolicyRequest) error {
+	p := pool.Get(128)
+	defer pool.Put(p)
+
+	body, err := cmds.Encode((*p)[:0], cmds.PolicyDelete, req)
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -1161,18 +1177,21 @@ func (c *Client) ListPolicies(ctx context.Context, req *ListRequest) (*Page[Poli
 }
 
 // CreateIdentity creates a new or overwrites an exisiting identity with the
-// name req.Identity within req.Enclave.
+// name req.Identity within enclave.
 //
-// It returns ErrEnclaveNotFound if no such enclave exists wrapped in a
+// It returns ErrEnclaveNotFound if no such enclave exists, wrapped in a
 // HostError. The returned error is of type *HostError.
-func (c *Client) CreateIdentity(ctx context.Context, req *CreateIdentityRequest) error {
-	body, err := cmds.Encode(nil, cmds.IdentityCreate, req)
+func (c *Client) CreateIdentity(ctx context.Context, enclave string, req *CreateIdentityRequest) error {
+	p := pool.Get(128)
+	defer pool.Put(p)
+
+	body, err := cmds.Encode((*p)[:0], cmds.IdentityCreate, req)
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
@@ -1186,7 +1205,7 @@ func (c *Client) CreateIdentity(ctx context.Context, req *CreateIdentityRequest)
 // an empty slice and no error.
 //
 // The returned error is of type *HostError. If the enclave does not
-// exist, GetIdentity returns ErrEnclaveNotFound wrapped in a HostError.
+// exist, GetIdentity returns ErrEnclaveNotFound, wrapped in a HostError.
 // Similarly, if at least one policy does not exist, GetIdentity returns
 // ErrIdentityNotFound wrapped in a HostError.
 func (c *Client) GetIdentity(ctx context.Context, enclave string, reqs ...*IdentityRequest) ([]*IdentityResponse, error) {
@@ -1218,19 +1237,22 @@ func (c *Client) GetIdentity(ctx context.Context, enclave string, reqs ...*Ident
 	return decodeResponse[pb.IdentityResponse, IdentityResponse](resp, cmds.IdentityGet)
 }
 
-// DeleteIdentity deletes the identity with the name req.Identity within req.Enclave.
+// DeleteIdentity deletes the identity with the name req.Identity within the enclave.
 //
 // It returns ErrEnclaveNotFound if no such enclave exists and ErrIdentityNotFound
-// if such identity exists wrapped in a HostError. The returned error is of type
+// if such identity exists, wrapped in a HostError. The returned error is of type
 // *HostError.
-func (c *Client) DeleteIdentity(ctx context.Context, req *DeleteIdentityRequest) error {
-	body, err := cmds.Encode(nil, cmds.IdentityDelete, req)
+func (c *Client) DeleteIdentity(ctx context.Context, enclave string, req *DeleteIdentityRequest) error {
+	p := pool.Get(128)
+	defer pool.Put(p)
+
+	body, err := cmds.Encode((*p)[:0], cmds.IdentityDelete, req)
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.Send(ctx, &Request{
-		Enclave: req.Enclave,
+		Enclave: enclave,
 		Body:    body,
 	})
 	if err != nil {
