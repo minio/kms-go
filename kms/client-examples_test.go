@@ -110,7 +110,7 @@ func ExampleClient_RemoveNode() {
 }
 
 // ExampleClient_ClusterStatus shows how to fetch cluster status information
-// about from a KMS cluster.
+// from a KMS cluster.
 func ExampleClient_ClusterStatus() {
 	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
