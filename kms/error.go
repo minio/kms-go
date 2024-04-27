@@ -174,6 +174,9 @@ var _ net.Error = (*HostError)(nil) // compiler check
 
 // Error returns the underlying error message prefixed by the host.
 func (e *HostError) Error() string {
+	if e.Host == "" {
+		return e.Err.Error()
+	}
 	return fmt.Sprintf("%q: %s", strings.TrimPrefix(e.Host, "https://"), e.Err.Error())
 }
 

@@ -276,9 +276,6 @@ func (r *DeleteEnclaveRequest) UnmarshalPB(v *pb.DeleteEnclaveRequest) error {
 
 // CreateKeyRequest contains options for creating secret keys.
 type CreateKeyRequest struct {
-	// Enclave is the KMS enclave in which the key is created.
-	Enclave string
-
 	// Name is the name of the key to create.
 	Name string
 
@@ -327,9 +324,6 @@ func (r *CreateKeyRequest) UnmarshalPB(v *pb.CreateKeyRequest) error {
 
 // ImportKeyRequest contains options for importing secret keys.
 type ImportKeyRequest struct {
-	// Enclave is the KMS enclave in which the key is created.
-	Enclave string
-
 	// Name is the name of the key to create.
 	Name string
 
@@ -377,9 +371,6 @@ func (r *ImportKeyRequest) UnmarshalPB(v *pb.ImportKeyRequest) error {
 // For removing just a single key version from a key refer to
 // Client.RemoveKeyVersion and RemoveKeyVersionRequest.
 type DeleteKeyRequest struct {
-	// Enclave is the KMS enclave containing the master key.
-	Enclave string
-
 	// Name is the name of the key to delete.
 	Name string
 
@@ -420,9 +411,6 @@ func (r *DeleteKeyRequest) UnmarshalPB(v *pb.DeleteKeyRequest) error {
 // KeyStatusRequest contains options for fetching
 // metadata about a key version.
 type KeyStatusRequest struct {
-	// Enclave is the KMS enclave containing the master key.
-	Enclave string
-
 	// Name is the name of the master key.
 	Name string
 
@@ -448,9 +436,6 @@ func (r *KeyStatusRequest) UnmarshalPB(v *pb.KeyStatusRequest) error {
 // EncryptRequest contains a plaintext message that should be encrypted and
 // associated data that is crypto. bound to the resulting ciphertext.
 type EncryptRequest struct {
-	// Enclave is the KMS enclave containing the master key.
-	Enclave string
-
 	// Name is the name of the master key.
 	Name string
 
@@ -491,9 +476,6 @@ func (r *EncryptRequest) UnmarshalPB(v *pb.EncryptRequest) error {
 
 // GenerateKeyRequest contains options for generating a new unique data encryption key.
 type GenerateKeyRequest struct {
-	// Enclave is the KMS enclave containing the master key.
-	Enclave string
-
 	// Name is the name of the master key.
 	Name string
 
@@ -533,9 +515,6 @@ func (r *GenerateKeyRequest) UnmarshalPB(v *pb.GenerateKeyRequest) error {
 
 // DecryptRequest contains a ciphertext message that should be decrypted.
 type DecryptRequest struct {
-	// Enclave is the KMS enclave containing the master key.
-	Enclave string
-
 	// Name is the name of the master key.
 	Name string
 
@@ -571,9 +550,6 @@ func (r *DecryptRequest) UnmarshalPB(v *pb.DecryptRequest) error {
 
 // CreatePolicyRequest contains options for creating policies.
 type CreatePolicyRequest struct {
-	// Enclave is the KMS enclave in which the policy is created.
-	Enclave string
-
 	// Name is the name of the policy that is created.
 	Name string
 
@@ -644,9 +620,6 @@ func (r *CreatePolicyRequest) UnmarshalPB(v *pb.CreatePolicyRequest) error {
 
 // AssignPolicyRequest contains options for assigning a policy to an identity.
 type AssignPolicyRequest struct {
-	// Enclave is the KMS enclave containing the policy and identity.
-	Enclave string
-
 	// Policy is the name of the policy that gets assigned to the identity.
 	Policy string
 
@@ -679,9 +652,6 @@ func (r *AssignPolicyRequest) UnmarshalPB(v *pb.AssignPolicyRequest) error {
 // PolicyRequest contains options for fetching a policy and
 // policy metadata.
 type PolicyRequest struct {
-	// Enclave is the KMS enclave containing the policy.
-	Enclave string
-
 	// Name is the name of the policy.
 	Name string
 }
@@ -700,9 +670,6 @@ func (r *PolicyRequest) UnmarshalPB(v *pb.PolicyRequest) error {
 
 // DeletePolicyRequest contains options for deleting a policy.
 type DeletePolicyRequest struct {
-	// Enclave is the KMS enclave containing the policy.
-	Enclave string
-
 	// Name is the name of the policy that is deleted.
 	Name string
 }
@@ -721,9 +688,6 @@ func (r *DeletePolicyRequest) UnmarshalPB(v *pb.DeletePolicyRequest) error {
 
 // CreateIdentityRequest contains options for creating new identities.
 type CreateIdentityRequest struct {
-	// Enclave is the KMS enclave in which the identity is created.
-	Enclave string
-
 	// Identity is the identity that is created.
 	Identity Identity
 
@@ -766,9 +730,6 @@ func (r *CreateIdentityRequest) UnmarshalPB(v *pb.CreateIdentityRequest) error {
 
 // IdentityRequest contains options for fetching identity metadata.
 type IdentityRequest struct {
-	// Enclave is the KMS enclave containing the identity.
-	Enclave string
-
 	// Identity is the identity.
 	Identity Identity
 }
@@ -787,9 +748,6 @@ func (r *IdentityRequest) UnmarshalPB(v *pb.IdentityRequest) error {
 
 // DeleteIdentityRequest contains options for deleting an identity.
 type DeleteIdentityRequest struct {
-	// Enclave is the KMS enclave containing the identity.
-	Enclave string
-
 	// Identity is the identity that is deleted.
 	Identity Identity
 }

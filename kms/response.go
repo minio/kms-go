@@ -13,35 +13,42 @@ import (
 
 	"github.com/minio/kms-go/kms/cmds"
 	"github.com/minio/kms-go/kms/internal/headers"
+	"github.com/minio/kms-go/kms/internal/pool"
 	pb "github.com/minio/kms-go/kms/protobuf"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
-func decodeResponse[M any, P pb.Pointer[M], T pb.Unmarshaler[P]](r *http.Response, c cmds.Command, v T) error {
+func decodeResponse[M, S any, P pb.Pointer[M], T interface {
+	pb.Unmarshaler[P]
+	*S
+}](r *http.Response, c cmds.Command) ([]T, error) {
 	if r.ContentLength < 0 {
-		return &HostError{
+		return nil, &HostError{
 			Host: r.Request.Host,
 			Err:  Error{http.StatusLengthRequired, "request content length is negative"},
 		}
 	}
 
-	buf := make([]byte, r.ContentLength)
+	p := pool.Get(int(r.ContentLength))
+	defer pool.Put(p)
+
+	buf := (*p)[:r.ContentLength]
 	if _, err := io.ReadFull(r.Body, buf); err != nil {
-		return hostError(r.Request.Host, err)
+		return nil, hostError(r.Request.Host, err)
 	}
 
-	b, err := cmds.Decode[M, P, T](buf, c, v)
-	if err != nil {
-		return hostError(r.Request.Host, err)
-	}
-	if len(b) != 0 {
-		return &HostError{
-			Host: r.Request.Host,
-			Err:  errors.New("kms: response body contains additional data"),
+	responses := make([]T, 0, 1)
+	for len(buf) > 0 {
+		var s S
+		var err error
+		buf, err = cmds.Decode[M, P, T](buf, c, &s)
+		if err != nil {
+			return nil, hostError(r.Request.Host, err)
 		}
+		responses = append(responses, &s)
 	}
-	return nil
+	return responses, nil
 }
 
 func decodeResponseMessage(r *http.Response, c cmds.Command, v proto.Message) error {
