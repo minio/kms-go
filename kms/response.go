@@ -302,6 +302,64 @@ func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
 	return nil
 }
 
+// ProfileStatusResponse contains profiling status information about
+// KMS server.
+type ProfileStatusResponse struct {
+	// Started is the point in time when the profiling was stated.
+	Started time.Time
+
+	// CPU indicates whether CPU profiling is enabled.
+	CPU bool
+
+	// Heap indicates whether heap memory profiling is enabled.
+	Heap bool
+
+	// Goroutine indicates whether go routine profiling is enabled.
+	Goroutine bool
+
+	// Thread indicates whether OS thread profiling is enabled.
+	Thread bool
+
+	// BlockRate is the fraction of runtime blocking events, like
+	// a go routine getting blocked, collected by the server. On
+	// average, the server sample one blocking event per BlockRate
+	// nanoseconds spent blocked.
+	BlockRate int
+
+	// MutexFraction is the fraction of mutex contention events,
+	// like waiting to accquire a lock, collected by the server.
+	// On average, the server reports 1/MutexFraction events in
+	// its mutex profile.
+	//
+	// If 1, the server collects every event and if 0 mutex
+	// profiling is disabled.
+	MutexFraction int
+}
+
+// MarshalPB converts the ProfileStatusResponse into its protobuf representation.
+func (s *ProfileStatusResponse) MarshalPB(v *pb.ProfileStatusResponse) error {
+	v.Started = pb.Time(s.Started)
+	v.CPU = s.CPU
+	v.Heap = s.Heap
+	v.Goroutine = s.Goroutine
+	v.Thread = s.Thread
+	v.BlockRate = uint32(s.BlockRate)
+	v.MutexFraction = uint32(s.MutexFraction)
+	return nil
+}
+
+// UnmarshalPB initializes the ProfileStatusResponse from its protobuf representation.
+func (s *ProfileStatusResponse) UnmarshalPB(v *pb.ProfileStatusResponse) error {
+	s.Started = v.Started.AsTime()
+	s.CPU = v.CPU
+	s.Heap = v.Heap
+	s.Goroutine = v.Goroutine
+	s.Thread = v.Thread
+	s.BlockRate = int(v.BlockRate)
+	s.MutexFraction = int(v.MutexFraction)
+	return nil
+}
+
 // ClusterStatusResponse contains status information about a KMS cluster.
 //
 // The overall view of the current cluster status, in particular
@@ -389,6 +447,27 @@ func (r gzipReadCloser) Close() error {
 		return gzipErr
 	}
 	return err
+}
+
+// ProfileResponse is the result of a profiling operation.
+// It's a TAR archive containing one pprof file for each
+// profile type, like CPU, heap memory a.s.o.
+type ProfileResponse struct {
+	Body io.ReadCloser
+}
+
+// Read reads data from the response body into b.
+func (r *ProfileResponse) Read(b []byte) (int, error) {
+	n, err := r.Body.Read(b)
+	if errors.Is(err, io.EOF) {
+		r.Body.Close()
+	}
+	return n, err
+}
+
+// Close closes the underlying response body.
+func (r *ProfileResponse) Close() error {
+	return r.Body.Close()
 }
 
 // EnclaveStatusResponse contains information about an enclave.

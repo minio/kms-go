@@ -142,6 +142,36 @@ func (r *ClusterStatusRequest) MarshalPB(*pb.ClusterStatusRequest) error { retur
 // UnmarshalPB initializes the ClusterStatusRequest from its protobuf representation.
 func (r *ClusterStatusRequest) UnmarshalPB(*pb.ClusterStatusRequest) error { return nil }
 
+// ProfileRequest contains options for customizing performance profiling.
+type ProfileRequest struct {
+	// Host on which performance profiling should be enabled.
+	Host string
+
+	// CPU enables or disables CPU profiling.
+	CPU bool
+
+	// Heap enables or disables heap memory profiling.
+	Heap bool
+
+	// Goroutine enables or disables runtime thread profiling.
+	Goroutine bool
+
+	// Goroutine enables or disables OS thread profiling.
+	Thread bool
+
+	// BlockRate enables or disables block profiling. If > 0,
+	// the server tries to sample sample one blocking event
+	// per BlockRate nanoseconds spent blocked.
+	BlockRate int
+
+	// MutexFraction enables or disables mutex profiling. If > 0,
+	// the server reports, on average, 1/MutexFraction events in
+	// its mutex profile.
+	//
+	// If set to 1, every mutex block event is reported.
+	MutexFraction int
+}
+
 // AddClusterNodeRequest describes which KMS server to add to an existing.
 type AddClusterNodeRequest struct {
 	// Host is the KMS server that should join a cluster.

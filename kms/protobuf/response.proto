@@ -122,6 +122,41 @@ message ServerStatusResponse {
   uint64 StackMemInUse = 18 [ json_name="sys_mem_stack_used" ];
 }
 
+message ProfileStatusResponse {
+   // Started is the point in time when profiling was enabled.
+   google.protobuf.Timestamp Started = 1 [ json_name = "started" ];
+
+   // CPU indicates whether the server is capturing a CPU profile.
+   bool CPU = 2 [ json_name = "cpu" ];
+
+   // Heap indicates whether the server is capturing a heap memory profile.
+   bool Heap = 3 [ json_name = "heap" ];
+
+   // Goroutine indicates whether the server is capturing a runtime go
+   // routine profile.
+   bool Goroutine = 4 [ json_name = "goroutine" ];
+
+   // Goroutine indicates whether the server is capturing a OS thread
+   // profile.
+   bool Thread = 5 [ json_name = "thread" ];
+
+   // BlockRate is the fraction of runtime blocking events, like a
+   // go routine getting blocked, collected by the server's block
+   // profile. On average, the server samples one blocking event per
+   // BlockRate nanoseconds spent blocked.
+   //
+   // If 0, block profiling is disabled.
+   uint32 BlockRate = 6 [ json_name = "block_rate" ];
+
+   // MutexFraction is the fraction of mutex contention events,
+   // like waiting to accquire a lock, collected by the server's
+   // mutex profile. On average, the server collects 1/MutexFraction
+   // events in its mutex profile.
+   //
+   // If 0, mutex profiling is disabled.
+   uint32 MutexFraction = 7 [ json_name = "mutex_frac" ];
+ }
+
 message ClusterStatusResponse {
   map<uint32,ServerStatusResponse> NodesUp = 1 [ json_name="nodes_up" ];
   map<uint32,string> NodesDown = 2 [ json_name="nodes_down" ];
