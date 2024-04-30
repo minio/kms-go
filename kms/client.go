@@ -14,11 +14,13 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -412,6 +414,150 @@ func (c *Client) Ready(ctx context.Context, req *ReadinessRequest) error {
 	return errors.Join(errs...)
 }
 
+// StartProfiling enables profiling on req.Host. A client must call
+// StopProfiling to stop the profiling again and obtain the resutls.
+// The ProfileRequest specifies which types of profiles should be
+// enabled and disabled.
+//
+// The returned error is of type *HostError.
+func (c *Client) StartProfiling(ctx context.Context, req *ProfileRequest) error {
+	const (
+		Method   = http.MethodPost
+		Path     = api.PathProfile
+		StatusOK = http.StatusOK
+	)
+
+	url, err := url.JoinPath(httpsURL(req.Host), Path)
+	if err != nil {
+		return hostError(req.Host, err)
+	}
+	url += fmt.Sprintf("?cpu=%v", req.CPU)
+	url += fmt.Sprintf("&heap=%v", req.Heap)
+
+	switch {
+	case req.Goroutine && req.Thread:
+		url += fmt.Sprintf("&thread=%v", "all")
+	case req.Goroutine:
+		url += fmt.Sprintf("&thread=%v", "runtime")
+	case req.Thread:
+		url += fmt.Sprintf("&thread=%v", "os")
+	}
+
+	if req.BlockRate > 0 {
+		url += "&block=" + strconv.Itoa(req.BlockRate)
+	}
+	if req.MutexFraction > 0 {
+		url += "&mutex=" + strconv.Itoa(req.MutexFraction)
+	}
+
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return hostError(req.Host, err)
+	}
+	r.Header.Set(headers.Accept, headers.ContentTypeBinary)
+
+	resp, err := c.direct.Do(r)
+	if err != nil {
+		return hostError(req.Host, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return hostError(req.Host, readError(resp))
+	}
+	return nil
+}
+
+// ProfilingStatus returns status information about an ongoing profiling
+// at req.Host.
+//
+// The returned error is of type *HostError.
+func (c *Client) ProfilingStatus(ctx context.Context, req *ProfileRequest) (*ProfileStatusResponse, error) {
+	const (
+		Method   = http.MethodGet
+		Path     = api.PathProfile
+		StatusOK = http.StatusOK
+	)
+	url, err := url.JoinPath(httpsURL(req.Host), Path)
+	if err != nil {
+		return nil, hostError(req.Host, err)
+	}
+
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, hostError(req.Host, err)
+	}
+	r.Header.Set(headers.Accept, headers.ContentTypeBinary)
+
+	resp, err := c.direct.Do(r)
+	if err != nil {
+		return nil, hostError(req.Host, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != StatusOK {
+		return nil, hostError(req.Host, readError(resp))
+	}
+
+	var response ProfileStatusResponse
+	if err = readResponse(resp, &response); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+// StopProfiling stops an ongoing profiling operation and returns
+// its results. It's the callers responsibility to close the returned
+// ProfileResponse.
+//
+// The returned error is of type *HostError.
+func (c *Client) StopProfiling(ctx context.Context, req *ProfileRequest) (*ProfileResponse, error) {
+	const (
+		Method   = http.MethodDelete
+		Path     = api.PathProfile
+		StatusOK = http.StatusOK
+	)
+
+	url, err := url.JoinPath(httpsURL(req.Host), Path)
+	if err != nil {
+		return nil, hostError(req.Host, err)
+	}
+
+	r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+	if err != nil {
+		return nil, hostError(req.Host, err)
+	}
+	r.Header.Add(headers.Accept, headers.ContentTypeAppAny)
+	r.Header.Add(headers.Accept, headers.ContentEncodingGZIP)
+
+	resp, err := c.direct.Do(r)
+	if err != nil {
+		return nil, hostError(req.Host, err)
+	}
+	if resp.StatusCode != StatusOK {
+		defer resp.Body.Close()
+		return nil, hostError(req.Host, readError(resp))
+	}
+
+	// Decompress the response body if the HTTP client doesn't
+	// decompress automatically.
+	body := resp.Body
+	if resp.Header.Get(headers.ContentEncoding) == headers.ContentEncodingGZIP {
+		z, err := gzip.NewReader(body)
+		if err != nil {
+			resp.Body.Close()
+			return nil, hostError(req.Host, err)
+		}
+		body = gzipReadCloser{
+			gzip:   z,
+			closer: body,
+		}
+	}
+	return &ProfileResponse{
+		Body: body,
+	}, nil
+}
+
 // ClusterStatus returns status information about the entire KMS cluster.
 // The returned ClusterStatusResponse contains status information for all
 // nodes within the cluster. It requires SysAdmin privileges.
@@ -558,6 +704,7 @@ func (c *Client) ReadDB(ctx context.Context) (*ReadDBResponse, error) {
 		return nil, hostError(host, err)
 	}
 	if resp.StatusCode != StatusOK {
+		defer resp.Body.Close()
 		return nil, hostError(host, readError(resp))
 	}
 
@@ -567,6 +714,7 @@ func (c *Client) ReadDB(ctx context.Context) (*ReadDBResponse, error) {
 	if resp.Header.Get(headers.ContentEncoding) == headers.ContentEncodingGZIP {
 		z, err := gzip.NewReader(body)
 		if err != nil {
+			resp.Body.Close()
 			return nil, hostError(host, err)
 		}
 		body = gzipReadCloser{
