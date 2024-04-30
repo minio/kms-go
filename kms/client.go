@@ -8,14 +8,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -68,7 +63,7 @@ func NewClient(conf *Config) (*Client, error) {
 
 	tlsConf := conf.TLS.Clone()
 	if conf.APIKey != nil {
-		cert, err := generateCertificate(conf.APIKey)
+		cert, err := GenerateCertificate(conf.APIKey, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1459,46 +1454,4 @@ func httpsURL(endpoint string) string {
 		endpoint = "https://" + endpoint
 	}
 	return endpoint
-}
-
-func generateCertificate(key APIKey) (tls.Certificate, error) {
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-
-	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			CommonName: key.Identity().String(),
-		},
-		NotBefore: time.Now().UTC(),
-		NotAfter:  time.Now().UTC().Add(90 * 24 * time.Hour),
-		KeyUsage:  x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{
-			x509.ExtKeyUsageClientAuth,
-		},
-		BasicConstraintsValid: true,
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, key.Public(), key.Private())
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-	privPKCS8, err := x509.MarshalPKCS8PrivateKey(key.Private())
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-	cert, err := tls.X509KeyPair(
-		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}),
-		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privPKCS8}),
-	)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-	if cert.Leaf == nil {
-		cert.Leaf, _ = x509.ParseCertificate(cert.Certificate[0])
-	}
-	return cert, nil
 }
