@@ -7,14 +7,20 @@ package kms
 import (
 	"crypto"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/base64"
+	"encoding/pem"
 	"errors"
 	"io"
+	"math/big"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // An Identity uniquely identifies a private/public key pair.
@@ -176,6 +182,55 @@ func ParseAPIKey(s string) (APIKey, error) {
 		key:      key,
 		identity: id,
 	}, nil
+}
+
+// GenerateCertificate generates a new self-signed TLS certificate
+// from the given template using the APIKey's private and public key.
+//
+// The template may be nil. In such a case the returned certificate
+// is generated using a default template and valid for 90 days.
+func GenerateCertificate(key APIKey, template *x509.Certificate) (tls.Certificate, error) {
+	if template == nil {
+		serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+		serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+		if err != nil {
+			return tls.Certificate{}, err
+		}
+
+		template = &x509.Certificate{
+			SerialNumber: serialNumber,
+			Subject: pkix.Name{
+				CommonName: key.Identity().String(),
+			},
+			NotBefore: time.Now().UTC(),
+			NotAfter:  time.Now().UTC().Add(90 * 24 * time.Hour),
+			KeyUsage:  x509.KeyUsageDigitalSignature,
+			ExtKeyUsage: []x509.ExtKeyUsage{
+				x509.ExtKeyUsageClientAuth,
+			},
+			BasicConstraintsValid: true,
+		}
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, key.Public(), key.Private())
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	privPKCS8, err := x509.MarshalPKCS8PrivateKey(key.Private())
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	cert, err := tls.X509KeyPair(
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}),
+		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privPKCS8}),
+	)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	if cert.Leaf == nil {
+		cert.Leaf, _ = x509.ParseCertificate(cert.Certificate[0])
+	}
+	return cert, nil
 }
 
 // apiKey is an APIKey implementation using Ed25519 public/private keys.
