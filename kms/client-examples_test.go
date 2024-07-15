@@ -7,9 +7,12 @@ package kms_test
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
+	"time"
 
 	"github.com/minio/kms-go/kms"
 )
@@ -262,5 +265,44 @@ func ExampleClient_ListEnclaves() {
 			log.Fatalf("Failed to list enclaves: %v", err)
 		}
 		fmt.Println(v.Name)
+	}
+}
+
+// ExampleClient_Logs shows how to fetch server log records.
+func ExampleClient_Logs() {
+	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	if err != nil {
+		log.Fatalf("Failed to parse KMS API key: %v", err)
+	}
+
+	client, err := kms.NewClient(&kms.Config{
+		Endpoints: []string{
+			"127.0.0.1:7373",
+		},
+		APIKey: key,
+		TLS: &tls.Config{
+			RootCAs:            nil,   // Use nil for system root CAs or customize
+			InsecureSkipVerify: false, // Don't skip TLS cert verification in prod
+		},
+	})
+	if err != nil {
+		log.Fatalf("Failed to create KMS client: %v", err)
+	}
+
+	logs, err := client.Logs(context.TODO(), &kms.LogRequest{
+		Host:  "127.0.0.1:7373",                 // The server to fetch logs from
+		Level: slog.LevelWarn,                   // Fetch only warnings or error logs
+		Since: time.Now().Add(-5 * time.Minute), // Fetch logs of the last 5 min
+	})
+	if err != nil {
+		log.Fatalf("Failed to fetch server logs: %v", err)
+	}
+	defer logs.Close()
+
+	for r, ok := logs.Next(); ok; r, ok = logs.Next() {
+		_ = r // TODO: print logs
+	}
+	if err = logs.Close(); err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
+		log.Fatal(err)
 	}
 }

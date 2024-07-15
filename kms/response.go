@@ -470,6 +470,43 @@ func (r *ProfileResponse) Close() error {
 	return r.Body.Close()
 }
 
+// LogResponse is a continuous stream of server log records.
+type LogResponse struct {
+	r   io.ReadCloser
+	buf []byte
+	err error
+}
+
+// Next returns the next LogRecord, if any, and a boolean
+// flag indicating whether there was an actual LogRecord.
+//
+// Once Next returns false, there are no more LogRecords.
+// Callers should use Close to check for any error encountered
+// while reading from the underlying connection.
+func (r *LogResponse) Next() (LogRecord, bool) {
+	if r.err != nil {
+		return LogRecord{}, false
+	}
+
+	var rec LogRecord
+	if r.err = readLogRecord(r.r, r.buf, &rec); r.err != nil {
+		r.Close()
+		return LogRecord{}, false
+	}
+	return rec, true
+}
+
+// Close closes the underlying stream and returns the
+// first error encountered while reading. If no error
+// has been encountered, it returns the first error
+// encountered while closing the connection, if any.
+func (r *LogResponse) Close() error {
+	if err := r.r.Close(); r.err == nil {
+		r.err = err
+	}
+	return r.err
+}
+
 // EnclaveStatusResponse contains information about an enclave.
 type EnclaveStatusResponse struct {
 	// Name is the name of the enclave.

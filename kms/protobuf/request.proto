@@ -13,6 +13,7 @@ package minio.kms;
 
 option go_package = "kms/protobuf";
 
+import "google/protobuf/timestamp.proto";
 import "rule.proto";
 
 message ClusterStatusRequest {}
@@ -74,6 +75,31 @@ message EnclaveStatusRequest {
     string Name = 1 [ json_name = "name" ];
 }
 
+message LogRequest {
+  // The server only sends log records with an equal or greater
+  // log level. The default level is slog.LevelInfo.
+  sint32 Level = 1 [ json_name = "level" ];
+ 
+  // The server only sends log records with a log message that
+  // contain this message.
+  string Message = 2 [ json_name = "message" ];
+
+  // Optionally, fetch log records since the given point in time.
+  // If empty, the server sends only new log records. The server
+  // ignores any timestamps newer then its current time.
+  google.protobuf.Timestamp Since = 3 [ json_name = "since" ];
+
+  // The server only sends only log records with this request method.
+  string Method = 4 [ json_name = "method" ];
+
+  // The server sends only log records with this request path.
+  string Path = 5 [ json_name = "path" ];
+
+  string Identity = 6 [ json_name = "identity" ];
+  
+  // The server sends only log records with this IP address.
+  string IP = 7 [ json_name = "ip" ];
+}
 
 message CreateKeyRequest {
   string Name = 1 [ json_name = "name" ];

@@ -6,6 +6,9 @@ package kms
 
 import (
 	"errors"
+	"log/slog"
+	"net/netip"
+	"time"
 
 	"github.com/minio/kms-go/kms/cmds"
 	pb "github.com/minio/kms-go/kms/protobuf"
@@ -245,9 +248,73 @@ func (r *EditClusterRequest) UnmarshalPB(v *pb.EditClusterRequest) error {
 	return nil
 }
 
-// BackupDBRequest contains options for requesting a database backup from
-// a KMS server.
-type BackupDBRequest struct{}
+// LogRequest contains options for fetching server logs.
+// It allows filtering for more specific log records.
+type LogRequest struct {
+	// Host is the KMS server from which logs are fetched.
+	Host string
+
+	// The server only sends log records with an equal or greater
+	// log level. The default level is slog.LevelInfo.
+	Level slog.Level
+
+	// The server only sends log records with a log message that
+	// contain this message.
+	Message string
+
+	// Optionally, fetch log records since the given point in time.
+	// If empty, the server sends only new log records. The server
+	// ignores any timestamps newer then its current time.
+	Since time.Time
+
+	// The server only sends only log records with this request method.
+	Method string
+
+	// The server sends only log records with this request path.
+	Path string
+
+	// The servers sends only log records with this identity.
+	Identity Identity
+
+	// The server sends only log records with this IP address.
+	IP netip.Addr
+}
+
+// MarshalPB converts the LogRequest into its protobuf representation.
+func (r *LogRequest) MarshalPB(v *pb.LogRequest) error {
+	v.Level = int32(r.Level)
+	v.Message = r.Message
+	v.Since = pb.Time(r.Since)
+	v.Method = r.Method
+	v.Path = r.Path
+	v.Identity = r.Identity.String()
+	if r.IP.IsValid() {
+		v.IP = r.IP.String()
+	} else {
+		v.IP = ""
+	}
+	return nil
+}
+
+// UnmarshalPB initializes the LogRequest from its protobuf representation.
+func (r *LogRequest) UnmarshalPB(v *pb.LogRequest) error {
+	var ip netip.Addr
+	if v.IP != "" {
+		var err error
+		if ip, err = netip.ParseAddr(v.IP); err != nil {
+			return err
+		}
+	}
+
+	r.Level = slog.Level(v.Level)
+	r.Message = v.Message
+	r.Since = v.Since.AsTime()
+	r.Method = v.Method
+	r.Path = v.Path
+	r.Identity = Identity(v.Identity)
+	r.IP = ip
+	return nil
+}
 
 // CreateEnclaveRequest contains options for creating enclaves.
 type CreateEnclaveRequest struct {

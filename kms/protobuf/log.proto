@@ -1,0 +1,64 @@
+// Copyright 2024 - MinIO, Inc. All rights reserved.
+// Use of this source code is governed by the AGPLv3
+// license that can be found in the LICENSE file.
+
+// Generate the Go protobuf code by running the protobuf compiler
+// from the repository root:
+//
+//   $ protoc -I=./kms/protobuf --go_out=. ./kms/protobuf/*.proto
+
+syntax = "proto3";
+
+package minio.kms;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "kms/protobuf";
+
+message LogRecord {
+  message StackFrame {
+    // Function is the package path-qualified function name containing the
+    // source line. If non-empty, this string uniquely identifies a single
+    // function in the program. This may be the empty string if not known.
+    string Function = 1 [ json_name = "function" ];
+
+    string File = 2 [ json_name = "file" ];
+
+    uint32 Line = 3 [ json_name = "line" ];
+  }
+
+  message Request {
+    // HTTP method of the request that caused this event.
+    string Method = 1 [ json_name = "method" ];
+
+    // URL path of the request that caused this event.
+    string Path = 2 [ json_name = "path" ];
+
+    // Identity of the request that caused this event.
+    string Identity = 3 [ json_name = "identity" ];
+    
+    // IP address of the client sending the request that
+    // caused this event.
+    string IP = 4 [ json_name = "ip" ];
+  }
+
+  // The log level of the event.
+  sint32 Level = 1 [ json_name="level" ];
+
+  // The time at which the event was produced.
+  google.protobuf.Timestamp Time = 2 [ json_name = "time" ];
+
+  // The log message.
+  string Message = 3 [ json_name = "message" ];
+
+  // The stack trace at the time the event was recorded.
+  // Its first frame is the location at which this event
+  // was produced and subsequent frames represent function
+  // calls higher up the call stack.
+  //
+  // If empty, no stack trace has been captured.
+  repeated StackFrame Trace = 4 [ json_name = "trace" ];
+
+  // HTTP request information
+  Request Req = 5 [ json_name = "request" ];
+}

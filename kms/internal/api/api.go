@@ -20,6 +20,7 @@ const (
 	PathProfile = "/v1/debug/pprof"
 
 	PathDB  = "/v1/db"
+	PathLog = "/v1/log"
 	PathKMS = "/v1/kms/"
 
 	PathRPCReplicate = "/v1/rpc/replicate"
