@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"aead.dev/mem"
 	"github.com/minio/kms-go/kms/cmds"
 	"github.com/minio/kms-go/kms/internal/api"
 	"github.com/minio/kms-go/kms/internal/headers"
@@ -719,6 +720,70 @@ func (c *Client) ReadDB(ctx context.Context) (*ReadDBResponse, error) {
 	}
 	return &ReadDBResponse{
 		Body: body,
+	}, nil
+}
+
+// Logs returns a stream of server log records from req.Host.
+// If req.Host is empty, the first host of the client's host
+// list is used.
+//
+// The LogRequest specifies which log records are fetched.
+// For example, only records with a certain log level or
+// records that contain a specific log message.
+//
+// It's the caller's responsibility to close a LogResponse to
+// release associated resources.
+//
+// It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
+func (c *Client) Logs(ctx context.Context, req *LogRequest) (*LogResponse, error) {
+	const (
+		Method   = http.MethodPost
+		Path     = api.PathLog
+		StatusOK = http.StatusOK
+	)
+
+	var (
+		err    error
+		reqURL string
+		host   = req.Host
+	)
+	if host == "" {
+		reqURL, host, err = c.lb.URL(Path)
+	} else {
+		reqURL, err = url.JoinPath(httpsURL(host), Path)
+	}
+	if err != nil {
+		return nil, hostError(host, err)
+	}
+
+	body, err := pb.Marshal(req)
+	if err != nil {
+		return nil, hostError(host, err)
+	}
+	r, err := http.NewRequestWithContext(ctx, Method, reqURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, hostError(host, err)
+	}
+	r.Header.Add(headers.Accept, headers.ContentTypeBinary)
+	r.Header.Add(headers.ContentType, headers.ContentTypeBinary)
+
+	resp, err := c.client.Do(r)
+	if err != nil {
+		return nil, hostError(host, err)
+	}
+	if resp.StatusCode != StatusOK {
+		defer resp.Body.Close()
+		return nil, hostError(host, readError(resp))
+	}
+
+	if ct := resp.Header.Get(headers.ContentType); ct != headers.ContentTypeBinary {
+		return nil, hostError(host, fmt.Errorf("kms: invalid content-type '%s'", ct))
+	}
+	return &LogResponse{
+		r:   resp.Body,
+		buf: make([]byte, 4*mem.KiB),
 	}, nil
 }
 
