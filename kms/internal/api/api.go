@@ -18,9 +18,9 @@ const (
 	PathHealthAPIs   = "/v1/health/api"
 
 	PathProfile = "/v1/debug/pprof"
+	PathLog     = "/v1/debug/log"
 
 	PathDB  = "/v1/db"
-	PathLog = "/v1/log"
 	PathKMS = "/v1/kms/"
 
 	PathRPCReplicate = "/v1/rpc/replicate"
