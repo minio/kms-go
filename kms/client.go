@@ -731,6 +731,9 @@ func (c *Client) ReadDB(ctx context.Context) (*ReadDBResponse, error) {
 // For example, only records with a certain log level or
 // records that contain a specific log message.
 //
+// It's the caller's responsibility to close a LogResponse to
+// release associated resources.
+//
 // It requires SysAdmin privileges.
 //
 // The returned error is of type *HostError.
