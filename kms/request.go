@@ -278,6 +278,10 @@ type LogRequest struct {
 
 	// The server sends only log records with this IP address.
 	IP netip.Addr
+
+	// The server sends only stack traces for records with an
+	// equal or greater log level.
+	TraceLevel slog.Level
 }
 
 // MarshalPB converts the LogRequest into its protobuf representation.
@@ -293,6 +297,7 @@ func (r *LogRequest) MarshalPB(v *pb.LogRequest) error {
 	} else {
 		v.IP = ""
 	}
+	v.TraceLevel = int32(r.TraceLevel)
 	return nil
 }
 
@@ -313,6 +318,7 @@ func (r *LogRequest) UnmarshalPB(v *pb.LogRequest) error {
 	r.Path = v.Path
 	r.Identity = Identity(v.Identity)
 	r.IP = ip
+	r.TraceLevel = slog.Level(v.TraceLevel)
 	return nil
 }
 
