@@ -6,6 +6,7 @@ package kms
 
 import (
 	"errors"
+	"io"
 	"log/slog"
 	"net/netip"
 	"time"
@@ -144,6 +145,23 @@ func (r *ClusterStatusRequest) MarshalPB(*pb.ClusterStatusRequest) error { retur
 
 // UnmarshalPB initializes the ClusterStatusRequest from its protobuf representation.
 func (r *ClusterStatusRequest) UnmarshalPB(*pb.ClusterStatusRequest) error { return nil }
+
+// ReadDBRequest contains options for fetching a KMS server database
+// snapshot.
+type ReadDBRequest struct {
+	// Host from which a database snapshot should be taken.
+	Host string
+}
+
+// WriteDBRequest contains options for restoring a KMS server's
+// database from a snapshot.
+type WriteDBRequest struct {
+	// Host to which the database snapshot is sent.
+	Host string
+
+	// The database snapshot.
+	Body io.Reader
+}
 
 // ProfileRequest contains options for customizing performance profiling.
 type ProfileRequest struct {
