@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"time"
 
+	"aead.dev/mtls"
 	pb "github.com/minio/kms-go/kms/protobuf"
 )
 
@@ -58,7 +59,7 @@ type LogRecord struct {
 
 	// If non-empty, identity of the request that caused
 	// this event.
-	Identity Identity
+	Identity mtls.Identity
 
 	// If valid, IP address of the client sending the
 	// request that caused this event.
@@ -81,7 +82,7 @@ func (r *LogRecord) MarshalPB(v *pb.LogRecord) error {
 			})
 		}
 	}
-	if r.Method != "" || r.Path != "" || r.Identity != "" || r.IP.IsValid() {
+	if r.Method != "" || r.Path != "" || r.Identity != (mtls.Identity{}) || r.IP.IsValid() {
 		v.Req = &pb.LogRecord_Request{
 			Method:   r.Method,
 			Path:     r.Path,
@@ -94,10 +95,19 @@ func (r *LogRecord) MarshalPB(v *pb.LogRecord) error {
 
 // UnmarshalPB initializes the LogRecord from its protobuf representation.
 func (r *LogRecord) UnmarshalPB(v *pb.LogRecord) error {
-	var ip netip.Addr
+	var (
+		ip netip.Addr
+		id mtls.Identity
+	)
 	if v.Req != nil {
 		var err error
 		if ip, err = netip.ParseAddr(v.Req.IP); err != nil {
+			return err
+		}
+	}
+	if v.Req.Identity != "" {
+		var err error
+		if id, err = mtls.ParseIdentity(v.Req.Identity); err != nil {
 			return err
 		}
 	}
@@ -117,7 +127,7 @@ func (r *LogRecord) UnmarshalPB(v *pb.LogRecord) error {
 
 	r.Method = v.Req.GetMethod()
 	r.Path = v.Req.GetPath()
-	r.Identity = Identity(v.Req.GetIdentity())
+	r.Identity = id
 	r.IP = ip
 	return nil
 }

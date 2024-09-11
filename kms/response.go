@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"aead.dev/mtls"
 	"github.com/minio/kms-go/kms/cmds"
 	"github.com/minio/kms-go/kms/internal/headers"
 	"github.com/minio/kms-go/kms/internal/pool"
@@ -516,7 +517,7 @@ type EnclaveStatusResponse struct {
 	CreatedAt time.Time
 
 	// CreatedBy is the identity that created the enclave.
-	CreatedBy Identity
+	CreatedBy mtls.Identity
 }
 
 // MarshalPB converts the EnclaveStatusResponse into its protobuf representation.
@@ -529,9 +530,17 @@ func (r *EnclaveStatusResponse) MarshalPB(v *pb.EnclaveStatusResponse) error {
 
 // UnmarshalPB initializes the EnclaveStatusResponse from its protobuf representation.
 func (r *EnclaveStatusResponse) UnmarshalPB(v *pb.EnclaveStatusResponse) error {
+	var id mtls.Identity
+	if v.CreatedBy != "" {
+		var err error
+		if id, err = mtls.ParseIdentity(v.CreatedBy); err != nil {
+			return err
+		}
+	}
+
 	r.Name = v.Name
 	r.CreatedAt = v.CreatedAt.AsTime()
-	r.CreatedBy = Identity(v.CreatedBy)
+	r.CreatedBy = id
 	return nil
 }
 
@@ -550,7 +559,7 @@ type KeyStatusResponse struct {
 	CreatedAt time.Time
 
 	// CreatedBy is the identity that created this key version.
-	CreatedBy Identity
+	CreatedBy mtls.Identity
 }
 
 // MarshalPB converts the KeyStatusResponse into its protobuf representation.
@@ -565,8 +574,12 @@ func (r *KeyStatusResponse) MarshalPB(v *pb.KeyStatusResponse) error {
 
 // UnmarshalPB initializes the KeyStatusResponse from its protobuf representation.
 func (r *KeyStatusResponse) UnmarshalPB(v *pb.KeyStatusResponse) error {
+	var id mtls.Identity
 	t, err := ParseSecretKeyType(v.Type)
 	if err != nil {
+		return err
+	}
+	if id, err = mtls.ParseIdentity(v.CreatedBy); err != nil {
 		return err
 	}
 
@@ -574,7 +587,7 @@ func (r *KeyStatusResponse) UnmarshalPB(v *pb.KeyStatusResponse) error {
 	r.Type = t
 	r.Version = int(v.Version)
 	r.CreatedAt = v.CreatedAt.AsTime()
-	r.CreatedBy = Identity(v.CreatedBy)
+	r.CreatedBy = id
 	return nil
 }
 
@@ -664,7 +677,7 @@ type PolicyStatusResponse struct {
 	CreatedAt time.Time
 
 	// CreatedBy is the identity that created the policy.
-	CreatedBy Identity
+	CreatedBy mtls.Identity
 }
 
 // MarshalPB converts the PolicyStatusResponse into its protobuf representation.
@@ -677,9 +690,17 @@ func (r *PolicyStatusResponse) MarshalPB(v *pb.PolicyStatusResponse) error {
 
 // UnmarshalPB initializes the PolicyStatusResponse from its protobuf representation.
 func (r *PolicyStatusResponse) UnmarshalPB(v *pb.PolicyStatusResponse) error {
+	var id mtls.Identity
+	if v.CreatedBy != "" {
+		var err error
+		if id, err = mtls.ParseIdentity(v.CreatedBy); err != nil {
+			return err
+		}
+	}
+
 	r.Name = v.Name
 	r.CreatedAt = v.CreatedAt.AsTime()
-	r.CreatedBy = Identity(v.CreatedBy)
+	r.CreatedBy = id
 	return nil
 }
 
@@ -698,7 +719,7 @@ type PolicyResponse struct {
 	CreatedAt time.Time
 
 	// CreatedBy is the identity that created the policy.
-	CreatedBy Identity
+	CreatedBy mtls.Identity
 }
 
 // MarshalPB converts the PolicyResponse into its protobuf representation.
@@ -730,9 +751,15 @@ func (r *PolicyResponse) MarshalPB(v *pb.PolicyResponse) error {
 
 // UnmarshalPB initializes the PolicyResponse from its protobuf representation.
 func (r *PolicyResponse) UnmarshalPB(v *pb.PolicyResponse) error {
-	r.Name = v.Name
+	var id mtls.Identity
+	if v.CreatedBy != "" {
+		var err error
+		if id, err = mtls.ParseIdentity(v.CreatedBy); err != nil {
+			return err
+		}
+	}
 
-	r.Allow = make(map[cmds.Command]RuleSet, len(v.Allow))
+	allow := make(map[cmds.Command]RuleSet, len(v.Allow))
 	for cmd, set := range v.Allow {
 		var c cmds.Command
 		if err := c.UnmarshalText([]byte(cmd)); err != nil {
@@ -743,10 +770,10 @@ func (r *PolicyResponse) UnmarshalPB(v *pb.PolicyResponse) error {
 		if err := rs.UnmarshalPB(set); err != nil {
 			return err
 		}
-		r.Allow[c] = rs
+		allow[c] = rs
 	}
 
-	r.Deny = make(map[cmds.Command]RuleSet, len(v.Deny))
+	deny := make(map[cmds.Command]RuleSet, len(v.Deny))
 	for cmd, set := range v.Deny {
 		var c cmds.Command
 		if err := c.UnmarshalText([]byte(cmd)); err != nil {
@@ -757,18 +784,21 @@ func (r *PolicyResponse) UnmarshalPB(v *pb.PolicyResponse) error {
 		if err := rs.UnmarshalPB(set); err != nil {
 			return err
 		}
-		r.Deny[c] = rs
+		deny[c] = rs
 	}
 
+	r.Name = v.Name
+	r.Allow = allow
+	r.Deny = deny
 	r.CreatedAt = v.CreatedAt.AsTime()
-	r.CreatedBy = Identity(v.CreatedBy)
+	r.CreatedBy = id
 	return nil
 }
 
 // IdentityResponse contains information about an identity.
 type IdentityResponse struct {
 	// Identity is the identity referring to a private/public key pair.
-	Identity Identity
+	Identity mtls.Identity
 
 	// Privilege is the identity's privilege.
 	Privilege Privilege
@@ -781,7 +811,7 @@ type IdentityResponse struct {
 	CreatedAt time.Time
 
 	// CreatedBy is the identity that created this identity.
-	CreatedBy Identity
+	CreatedBy mtls.Identity
 
 	// IsServiceAccount indicates whether this identity is a service
 	// account. By default, service accounts inherit the permissions
@@ -790,7 +820,7 @@ type IdentityResponse struct {
 	IsServiceAccount bool
 
 	// ServiceAccounts contains all service accounts of this identity.
-	ServiceAccounts []Identity
+	ServiceAccounts []mtls.Identity
 }
 
 // MarshalPB converts the IdentityResponse into its protobuf representation.
@@ -810,15 +840,38 @@ func (r *IdentityResponse) MarshalPB(v *pb.IdentityResponse) error {
 
 // UnmarshalPB initializes the IdentityResponse from its protobuf representation.
 func (r *IdentityResponse) UnmarshalPB(v *pb.IdentityResponse) error {
-	r.Identity = Identity(v.Identity)
+	var (
+		err             error
+		id, createdBy   mtls.Identity
+		serviceAccounts []mtls.Identity
+	)
+	if v.Identity != "" {
+		if id, err = mtls.ParseIdentity(v.Identity); err != nil {
+			return err
+		}
+	}
+	if v.CreatedBy != "" {
+		if createdBy, err = mtls.ParseIdentity(v.CreatedBy); err != nil {
+			return err
+		}
+	}
+	if len(v.ServiceAccounts) > 0 {
+		serviceAccounts = make([]mtls.Identity, 0, len(v.ServiceAccounts))
+		for _, a := range v.ServiceAccounts {
+			i, err := mtls.ParseIdentity(a)
+			if err != nil {
+				return err
+			}
+			serviceAccounts = append(serviceAccounts, i)
+		}
+	}
+
+	r.Identity = id
 	r.Privilege = Privilege(v.Privilege)
 	r.Policy = v.Policy
 	r.CreatedAt = v.CreatedAt.AsTime()
-	r.CreatedBy = Identity(v.CreatedBy)
+	r.CreatedBy = createdBy
 	r.IsServiceAccount = v.IsServiceAccount
-	r.ServiceAccounts = make([]Identity, 0, len(v.ServiceAccounts))
-	for _, a := range v.ServiceAccounts {
-		r.ServiceAccounts = append(r.ServiceAccounts, Identity(a))
-	}
+	r.ServiceAccounts = serviceAccounts
 	return nil
 }

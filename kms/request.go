@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"time"
 
+	"aead.dev/mtls"
 	"github.com/minio/kms-go/kms/cmds"
 	pb "github.com/minio/kms-go/kms/protobuf"
 )
@@ -292,7 +293,7 @@ type LogRequest struct {
 	Path string
 
 	// The servers sends only log records with this identity.
-	Identity Identity
+	Identity mtls.Identity
 
 	// The server sends only log records with this IP address.
 	IP netip.Addr
@@ -321,10 +322,19 @@ func (r *LogRequest) MarshalPB(v *pb.LogRequest) error {
 
 // UnmarshalPB initializes the LogRequest from its protobuf representation.
 func (r *LogRequest) UnmarshalPB(v *pb.LogRequest) error {
-	var ip netip.Addr
+	var (
+		ip netip.Addr
+		id mtls.Identity
+	)
 	if v.IP != "" {
 		var err error
 		if ip, err = netip.ParseAddr(v.IP); err != nil {
+			return err
+		}
+	}
+	if v.Identity != "" {
+		var err error
+		if id, err = mtls.ParseIdentity(v.Identity); err != nil {
 			return err
 		}
 	}
@@ -334,7 +344,7 @@ func (r *LogRequest) UnmarshalPB(v *pb.LogRequest) error {
 	r.Since = v.Since.AsTime()
 	r.Method = v.Method
 	r.Path = v.Path
-	r.Identity = Identity(v.Identity)
+	r.Identity = id
 	r.IP = ip
 	r.TraceLevel = slog.Level(v.TraceLevel)
 	return nil
@@ -745,12 +755,12 @@ type AssignPolicyRequest struct {
 	Policy string
 
 	// Identity is the identity to which the policy should apply.
-	Identity Identity
+	Identity mtls.Identity
 }
 
 // MarshalPB converts the AssignPolicyRequest into its protobuf representation.
 func (r *AssignPolicyRequest) MarshalPB(v *pb.AssignPolicyRequest) error {
-	if r.Identity == "" {
+	if r.Identity == (mtls.Identity{}) {
 		return errors.New("kms: identity is empty")
 	}
 
@@ -764,8 +774,12 @@ func (r *AssignPolicyRequest) UnmarshalPB(v *pb.AssignPolicyRequest) error {
 	if v.Identity == "" {
 		return errors.New("kms: identity is empty")
 	}
+	id, err := mtls.ParseIdentity(v.Identity)
+	if err != nil {
+		return err
+	}
 
-	r.Identity = Identity(v.Identity)
+	r.Identity = id
 	r.Policy = v.Policy
 	return nil
 }
@@ -810,7 +824,7 @@ func (r *DeletePolicyRequest) UnmarshalPB(v *pb.DeletePolicyRequest) error {
 // CreateIdentityRequest contains options for creating new identities.
 type CreateIdentityRequest struct {
 	// Identity is the identity that is created.
-	Identity Identity
+	Identity mtls.Identity
 
 	// Privilege is the identity's privilege. If empty, defaults to User.
 	Privilege Privilege
@@ -835,15 +849,24 @@ func (r *CreateIdentityRequest) MarshalPB(v *pb.CreateIdentityRequest) error {
 
 // UnmarshalPB initializes the CreateIdentityRequest from its protobuf representation.
 func (r *CreateIdentityRequest) UnmarshalPB(v *pb.CreateIdentityRequest) error {
-	var privilege Privilege
+	var (
+		privilege Privilege
+		id        mtls.Identity
+	)
 	if v.Privilege != "" {
 		var err error
 		if privilege, err = ParsePrivilege(v.Privilege); err != nil {
 			return err
 		}
 	}
+	if v.Identity != "" {
+		var err error
+		if id, err = mtls.ParseIdentity(v.Identity); err != nil {
+			return err
+		}
+	}
 
-	r.Identity = Identity(v.Identity)
+	r.Identity = id
 	r.Privilege = privilege
 	r.IsServiceAccount = v.IsServiceAccount
 	return nil
@@ -852,7 +875,7 @@ func (r *CreateIdentityRequest) UnmarshalPB(v *pb.CreateIdentityRequest) error {
 // IdentityRequest contains options for fetching identity metadata.
 type IdentityRequest struct {
 	// Identity is the identity.
-	Identity Identity
+	Identity mtls.Identity
 }
 
 // MarshalPB converts the IdentityRequest into its protobuf representation.
@@ -863,14 +886,22 @@ func (r *IdentityRequest) MarshalPB(v *pb.IdentityRequest) error {
 
 // UnmarshalPB initializes the IdentityRequest from its protobuf representation.
 func (r *IdentityRequest) UnmarshalPB(v *pb.IdentityRequest) error {
-	r.Identity = Identity(v.Identity)
+	var id mtls.Identity
+	if v.Identity != "" {
+		var err error
+		if id, err = mtls.ParseIdentity(v.Identity); err != nil {
+			return err
+		}
+	}
+
+	r.Identity = id
 	return nil
 }
 
 // DeleteIdentityRequest contains options for deleting an identity.
 type DeleteIdentityRequest struct {
 	// Identity is the identity that is deleted.
-	Identity Identity
+	Identity mtls.Identity
 }
 
 // MarshalPB converts the DeleteIdentityRequest into its protobuf representation.
@@ -881,6 +912,11 @@ func (r *DeleteIdentityRequest) MarshalPB(v *pb.DeleteIdentityRequest) error {
 
 // UnmarshalPB initializes the DeleteIdentityRequest from its protobuf representation.
 func (r *DeleteIdentityRequest) UnmarshalPB(v *pb.DeleteIdentityRequest) error {
-	r.Identity = Identity(v.Identity)
+	id, err := mtls.ParseIdentity(v.Identity)
+	if err != nil {
+		return err
+	}
+
+	r.Identity = id
 	return nil
 }

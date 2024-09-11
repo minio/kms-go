@@ -1,6 +1,6 @@
 module github.com/minio/kms-go/kes
 
-go 1.21
+go 1.22.0
 
 require (
 	aead.dev/mem v0.2.0

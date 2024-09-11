@@ -14,11 +14,12 @@ import (
 	"log/slog"
 	"time"
 
+	"aead.dev/mtls"
 	"github.com/minio/kms-go/kms"
 )
 
 func ExampleNewClient() {
-	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatalf("Failed to parse KMS API key: %v", err)
 	}
@@ -55,7 +56,7 @@ func ExampleNewClient() {
 // KMS cluster dynamically expanding it. The added KMS server must not
 // be part of an exisiting cluster.
 func ExampleClient_AddNode() {
-	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatalf("Failed to parse KMS API key: %v", err)
 	}
@@ -85,7 +86,7 @@ func ExampleClient_AddNode() {
 // ExampleClient_RemoveNode shows how to remove a KMS server from the
 // cluster it is currently part of.
 func ExampleClient_RemoveNode() {
-	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatalf("Failed to parse KMS API key: %v", err)
 	}
@@ -115,7 +116,7 @@ func ExampleClient_RemoveNode() {
 // ExampleClient_ClusterStatus shows how to fetch cluster status information
 // from a KMS cluster.
 func ExampleClient_ClusterStatus() {
-	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatalf("Failed to parse KMS API key: %v", err)
 	}
@@ -143,7 +144,7 @@ func ExampleClient_ClusterStatus() {
 
 // ExampleClient_CreateEnclave shows how to create a new enclave.
 func ExampleClient_CreateEnclave() {
-	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatalf("Failed to parse KMS API key: %v", err)
 	}
@@ -172,7 +173,7 @@ func ExampleClient_CreateEnclave() {
 
 // ExampleClient_DeleteEnclave shows how to delete an existing enclave.
 func ExampleClient_DeleteEnclave() {
-	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatalf("Failed to parse KMS API key: %v", err)
 	}
@@ -202,7 +203,7 @@ func ExampleClient_DeleteEnclave() {
 // ExampleClient_EnclaveStatus shows how to fetch status information about two enclaves.
 // Fetching information about multiple enclaves requires just a single network request.
 func ExampleClient_EnclaveStatus() {
-	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatalf("Failed to parse KMS API key: %v", err)
 	}
@@ -238,7 +239,7 @@ func ExampleClient_EnclaveStatus() {
 // ExampleClient_EnclaveStatus shows how to fetch status information about two enclaves.
 // Fetching information about multiple enclaves requires just a single network request.
 func ExampleClient_ListEnclaves() {
-	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatalf("Failed to parse KMS API key: %v", err)
 	}
@@ -270,7 +271,7 @@ func ExampleClient_ListEnclaves() {
 
 // ExampleClient_Logs shows how to fetch server log records.
 func ExampleClient_Logs() {
-	key, err := kms.ParseAPIKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
 	if err != nil {
 		log.Fatalf("Failed to parse KMS API key: %v", err)
 	}
