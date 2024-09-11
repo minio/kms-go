@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"aead.dev/mem"
+	"aead.dev/mtls"
 	"github.com/minio/kms-go/kms/cmds"
 	"github.com/minio/kms-go/kms/internal/api"
 	"github.com/minio/kms-go/kms/internal/headers"
@@ -42,7 +43,7 @@ type Config struct {
 	//
 	// When providing an API key, no TLS.Certificates
 	// or TLS.GetClientCertificate must be present.
-	APIKey APIKey
+	APIKey mtls.PrivateKey
 
 	// Optional TLS configuration.
 	//
