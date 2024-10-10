@@ -821,6 +821,10 @@ type IdentityResponse struct {
 
 	// ServiceAccounts contains all service accounts of this identity.
 	ServiceAccounts []mtls.Identity
+
+	// Tags are optional metadata labels attached to an identity as
+	// key-value pairs.
+	Tags map[string]string
 }
 
 // MarshalPB converts the IdentityResponse into its protobuf representation.
@@ -835,6 +839,7 @@ func (r *IdentityResponse) MarshalPB(v *pb.IdentityResponse) error {
 	for _, a := range r.ServiceAccounts {
 		v.ServiceAccounts = append(v.ServiceAccounts, a.String())
 	}
+	v.Tags = r.Tags
 	return nil
 }
 
@@ -873,5 +878,6 @@ func (r *IdentityResponse) UnmarshalPB(v *pb.IdentityResponse) error {
 	r.CreatedBy = createdBy
 	r.IsServiceAccount = v.IsServiceAccount
 	r.ServiceAccounts = serviceAccounts
+	r.Tags = v.Tags
 	return nil
 }

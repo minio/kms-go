@@ -832,6 +832,10 @@ type CreateIdentityRequest struct {
 	// IsServiceAccount indicates whether this identity is a service
 	// account.
 	IsServiceAccount bool
+
+	// Tags are optional metadata labels attached to the identity
+	// as key-value pairs.
+	Tags map[string]string
 }
 
 // MarshalPB converts the CreateIdentityequest into its protobuf representation.
@@ -844,6 +848,7 @@ func (r *CreateIdentityRequest) MarshalPB(v *pb.CreateIdentityRequest) error {
 	v.Identity = r.Identity.String()
 	v.Privilege = privilege
 	v.IsServiceAccount = r.IsServiceAccount
+	v.Tags = r.Tags
 	return nil
 }
 
@@ -869,6 +874,7 @@ func (r *CreateIdentityRequest) UnmarshalPB(v *pb.CreateIdentityRequest) error {
 	r.Identity = id
 	r.Privilege = privilege
 	r.IsServiceAccount = v.IsServiceAccount
+	r.Tags = v.Tags
 	return nil
 }
 

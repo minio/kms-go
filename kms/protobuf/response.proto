@@ -284,6 +284,9 @@ message IdentityResponse {
   bool IsServiceAccount = 6 [ json_name = "is_service_account" ];
 
   repeated string ServiceAccounts = 7 [ json_name = "service_accounts" ];
+
+  // Tags are optional metadata labels attached to the key as key-value pairs.
+  map<string,string> Tags = 8 [ json_name="tags" ];
 }
 
 message ListIdentitiesResponse {
