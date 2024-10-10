@@ -233,6 +233,9 @@ message CreateIdentityRequest {
 
   // IsServiceAccount indicates whether the identity is a service account.
   bool IsServiceAccount = 3 [ json_name = "service_account" ];
+
+  // Tags are optional metadata labels attached to the identity as key-value pairs.
+  map<string,string> Tags = 4 [ json_name="tags" ];
 }
 
 message IdentityRequest {
