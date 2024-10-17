@@ -1,7 +1,7 @@
 aead.dev/mem v0.2.0 h1:ufgkESS9+lHV/GUjxgc2ObF43FLZGSemh+W+y27QFMI=
 aead.dev/mem v0.2.0/go.mod h1:4qj+sh8fjDhlvne9gm/ZaMRIX9EkmDrKOLwmyDtoMWM=
-aead.dev/mtls v0.1.0 h1:zT/p8BpBXol0bmRaJz4WyMW3wTjSjJztKlSoXl/a+rs=
-aead.dev/mtls v0.1.0/go.mod h1:QirwQiq697/G62Ug6LbzfeR4Nq1vBGch5ajUZdAzJaw=
+aead.dev/mtls v0.2.1 h1:47NHWciMvrmEhlkpnis8/RGEa9HR9gcbDPfcArG+Yqs=
+aead.dev/mtls v0.2.1/go.mod h1:rZvRApIcPkCNu2AgpFoaMxKBee/XVkKs7wEuYgqLI3Q=
 github.com/google/go-cmp v0.5.5 h1:Khx7svrCpmxxtHBq5j2mp/xVjsi8hQMfNLvJFAlrGgU=
 github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 h1:E7g+9GITq07hpfrRu66IVDexMakfv52eLZ2CXBWiKr4=
