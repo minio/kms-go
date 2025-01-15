@@ -22,14 +22,9 @@ type dnsResolver interface {
 	LookupHost(ctx context.Context, host string) (addrs []string, err error)
 }
 
-type randomNumberGenerator interface {
-	Intn(n int) int
-}
-
 type loadBalancer struct {
 	enclave          string
 	endpoints        []*loadBalancerEndpoint
-	rand             randomNumberGenerator
 	DNSResolver      dnsResolver
 	getLocalNetworks func() ([]net.Addr, error)
 	sendRequest      func(context.Context, *endpointRequest) (*http.Response, error)
@@ -41,7 +36,6 @@ func newLoadBalancer(enclaveName string) *loadBalancer {
 		DNSResolver:      new(net.Resolver),
 		getLocalNetworks: net.InterfaceAddrs,
 		sendRequest:      sendRequest,
-		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -113,9 +107,6 @@ func (lb *loadBalancer) prepareLoadBalancer(endpoints []string) {
 	}
 	if lb.sendRequest == nil {
 		lb.sendRequest = sendRequest
-	}
-	if lb.rand == nil {
-		lb.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	}
 
 	ifNetworks := make(map[string]*net.IPNet)
@@ -319,7 +310,7 @@ func (lb *loadBalancer) Send(ctx context.Context, client *retry, method string, 
 		endpointCount     = len(lb.endpoints)
 		tryCount          = 0
 		fullRetry         = false
-		R                 = lb.rand.Intn(len(lb.endpoints))
+		R                 = rand.Intn(len(lb.endpoints))
 		nextEndpointIndex int
 	)
 

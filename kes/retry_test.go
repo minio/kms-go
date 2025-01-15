@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -164,7 +163,6 @@ func TestPrepareLoadBalancer(t *testing.T) {
 		enclave:          "",
 		DNSResolver:      Resolver,
 		getLocalNetworks: MockGetInterfaces,
-		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
 	dnsErrorEndpoint := "https://minio.404:7373"
@@ -223,7 +221,6 @@ func TestLoadBalancerSend_SingleHost(t *testing.T) {
 		DNSResolver:      Resolver,
 		getLocalNetworks: MockGetInterfaces,
 		sendRequest:      MockSendRequest(200, false),
-		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
 	retryClient := new(retry)
@@ -287,7 +284,6 @@ func TestLoadBalancerSend_MultiHost(t *testing.T) {
 		DNSResolver:      Resolver,
 		getLocalNetworks: MockGetInterfaces,
 		sendRequest:      MockSendRequest(200, false),
-		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
 	retryClient := new(retry)
@@ -377,22 +373,5 @@ func TestLoadBalancerSend_MultiHost(t *testing.T) {
 	// in order to trigger probing.
 	for i := range lb.endpoints {
 		lb.endpoints[i].timeout = time.Now().AddDate(0, 0, -1)
-	}
-
-	// This test triggers a probe on all endpoints in order
-	// to clear all timeouts
-	mockRandom := new(MockRandomNumber)
-	lb.rand = mockRandom
-	mockRandom.Number = 0
-	lb.sendRequest = MockSendRequest(200, false)
-	for i := 0; i < len(endpoints); i++ {
-		_, _ = lb.Send(ctx, retryClient, method, path, nil, options...)
-		mockRandom.Number++
-	}
-
-	for _, v := range lb.endpoints {
-		if !v.timeout.IsZero() {
-			t.Fatalf("Endpoint %s was expected to NOT be timed-out", v.addr)
-		}
 	}
 }
