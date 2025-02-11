@@ -219,17 +219,33 @@ type RemoveClusterNodeRequest struct {
 	// Host is the KMS server that should leave a cluster.
 	// It must be of the form "host" or "host:port".
 	Host string
+
+	// Delete any cluster information on the KMS server that gets removed
+	// from the cluster. By default, a KMS server that gets removed deletes
+	// itself but keeps any other cluster information.
+	//
+	// If not set, the removed server deletes itself from its cluster definition
+	// but does not delete any other cluster information. Such a server fails to
+	// start again since its cluster definition describes a cluster that itself
+	// is not a part of.
+	//
+	// If set, the removed server deletes all cluster information. Such a server
+	// re-creates a new single-node cluster definition on restart. This is useful
+	// if the server should be re-purposed or join another cluster.
+	DeleteClusterOnHost bool
 }
 
 // MarshalPB converts the RemoveClusterNodeRequest into its protobuf representation.
 func (r *RemoveClusterNodeRequest) MarshalPB(v *pb.RemoveClusterNodeRequest) error {
 	v.Host = r.Host
+	v.DeleteClusterOnHost = r.DeleteClusterOnHost
 	return nil
 }
 
 // UnmarshalPB initializes the RemoveClusterNodeRequest from its protobuf representation.
 func (r *RemoveClusterNodeRequest) UnmarshalPB(v *pb.RemoveClusterNodeRequest) error {
 	r.Host = v.Host
+	r.DeleteClusterOnHost = v.DeleteClusterOnHost
 	return nil
 }
 
