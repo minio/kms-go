@@ -52,6 +52,8 @@ message AddClusterNodeRequest {
 
 message RemoveClusterNodeRequest {
   string Host = 1 [ json_name = "host" ];
+
+  bool DeleteClusterOnHost = 2 [ json_name = "delete_cluster_on_host" ];
 }
 
 message EditClusterRequest {
