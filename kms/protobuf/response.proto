@@ -38,6 +38,8 @@ message VersionResponse {
 
   // Host is the KMS server host or host:port. 
   string Host = 4 [ json_name="host" ];
+
+  bool FIPS140 = 5 [ json_name="fips140" ];
 }
 
 message ServerStatusResponse {

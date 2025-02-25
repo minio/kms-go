@@ -144,6 +144,10 @@ type VersionResponse struct {
 
 	// Host is the KMS server endpoint as 'host' or 'host:port'.
 	Host string
+
+	// Whether the KMS server uses a FIPS 140 certified crypto module
+	// and only uses FIPS 140 compliant primitives - like AES.
+	FIPS140 bool
 }
 
 // MarshalPB converts the VersionResponse into its protobuf representation.
@@ -152,6 +156,7 @@ func (r *VersionResponse) MarshalPB(v *pb.VersionResponse) error {
 	v.Commit = r.Commit
 	v.APIVersion = r.APIVersion
 	v.Host = r.Host
+	v.FIPS140 = r.FIPS140
 	return nil
 }
 
@@ -161,6 +166,7 @@ func (r *VersionResponse) UnmarshalPB(v *pb.VersionResponse) error {
 	r.Commit = v.Commit
 	r.APIVersion = v.APIVersion
 	r.Host = v.Host
+	r.FIPS140 = v.FIPS140
 	return nil
 }
 
