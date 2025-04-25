@@ -232,6 +232,15 @@ message GenerateKeyResponse {
   bytes Ciphertext = 3 [ json_name = "ciphertext" ];
 }
 
+message MACResponse {
+  // Version identifies the particular key within a key ring used to generate
+  // this MAC.
+  uint32 Version = 1 [ json_name = "version" ];
+
+  // MAC is the message authentication code for the message.
+  bytes MAC = 2 [ json_name = "mac"];
+}
+
 message PolicyStatusResponse {
   // Name is the name of the policy.
   string Name = 1 [ json_name = "name" ];

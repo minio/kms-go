@@ -674,6 +674,30 @@ func (r *GenerateKeyResponse) UnmarshalPB(v *pb.GenerateKeyResponse) error {
 	return nil
 }
 
+// MACResponse contains a message authentication code for a given message.
+type MACResponse struct {
+	// Version identifies the particular key within a key ring used to generate
+	// this MAC.
+	Version int
+
+	// MAC is the message authentication code for the message.
+	MAC []byte
+}
+
+// MarshalPB converts the MACResponse into its protobuf representation.
+func (r *MACResponse) MarshalPB(v *pb.MACResponse) error {
+	v.Version = uint32(r.Version)
+	v.MAC = r.MAC
+	return nil
+}
+
+// UnmarshalPB initializes the MACResponse from its protobuf representation.
+func (r *MACResponse) UnmarshalPB(v *pb.MACResponse) error {
+	r.Version = int(v.Version)
+	r.MAC = v.MAC
+	return nil
+}
+
 // PolicyStatusResponse contains information about a policy.
 type PolicyStatusResponse struct {
 	// Name is the name of the policy.

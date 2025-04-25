@@ -188,6 +188,19 @@ message GenerateKeyRequest {
   uint32 Length = 4 [ json_name = "length"];
 }
 
+message MACRequest {
+  // Name of the master key.
+  string Name = 1 [ json_name = "name" ];
+
+  // Version identifies the key version within the key ring used to compute
+  // the MAC. If zero, the latest key version is used.
+  uint32 Version = 2 [ json_name = "version" ];
+
+  // Message is the data for which the MAC is computed. Given the same master
+  // key, two different messages will result in two different MACs.
+  bytes Message = 3 [ json_name = "message" ];
+}
+
 message DecryptRequest {
   string Name = 1 [ json_name = "name" ];
 
