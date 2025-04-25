@@ -30,6 +30,7 @@ const (
 	KeyGenerate     Command = 207
 	KeyList         Command = 208
 	KeyListVersions Command = 209
+	KeyMAC          Command = 210
 
 	PolicyCreate Command = 301
 	PolicyDelete Command = 302
@@ -138,6 +139,7 @@ var cmdTexts = map[Command]string{
 	KeyGenerate:     "KEY:GENERATE",
 	KeyList:         "KEY:LIST",
 	KeyListVersions: "KEY:LISTVERSIONS",
+	KeyMAC:          "KEY:MAC",
 
 	PolicyCreate: "POLICY:CREATE",
 	PolicyDelete: "POLICY:DELETE",
@@ -171,6 +173,7 @@ var textCmds = map[string]Command{
 	"KEY:GENERATE":     KeyGenerate,
 	"KEY:LIST":         KeyList,
 	"KEY:LISTVERSIONS": KeyListVersions,
+	"KEY:MAC":          KeyMAC,
 
 	"POLICY:CREATE": PolicyCreate,
 	"POLICY:DELETE": PolicyDelete,

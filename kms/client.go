@@ -1259,6 +1259,47 @@ func (c *Client) GenerateKey(ctx context.Context, enclave string, reqs ...*Gener
 	return decodeResponse[pb.GenerateKeyResponse, GenerateKeyResponse](resp, cmds.KeyGenerate)
 }
 
+// MAC computes a message authentication code (MAC) over a message.
+// The returned MACResponse contains the MAC as well as the key version
+// used to compute the MAC.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and
+// ErrKeyNotFound if no such key exists, wrapped in a HostError.
+//
+// The returned error is of type *HostError.
+func (c *Client) MAC(ctx context.Context, enclave string, reqs ...*MACRequest) ([]*MACResponse, error) {
+	if len(reqs) == 0 {
+		return []*MACResponse{}, nil
+	}
+
+	var size int
+	for _, req := range reqs {
+		size = 128 + len(req.Message)
+	}
+	p := pool.Get(size)
+	defer pool.Put(p)
+
+	body := (*p)[:0]
+	for _, req := range reqs {
+		var err error
+		body, err = cmds.Encode(body, cmds.KeyMAC, req)
+		if err != nil {
+			return nil, hostError("", err)
+		}
+	}
+
+	resp, err := c.Send(ctx, &Request{
+		Enclave: enclave,
+		Body:    body,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return decodeResponse[pb.MACResponse, MACResponse](resp, cmds.KeyMAC)
+}
+
 // CreatePolicy creates a new or overwrites an exisiting policy with the
 // name req.Name within the given enclave.
 //

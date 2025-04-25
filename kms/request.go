@@ -660,6 +660,38 @@ func (r *GenerateKeyRequest) UnmarshalPB(v *pb.GenerateKeyRequest) error {
 	return nil
 }
 
+// MACRequest contains options for computing message authentication codes (MACs)
+// over messages.
+type MACRequest struct {
+	// Name of the master key.
+	Name string
+
+	// Version identifies the key version within the key ring used to compute
+	// the MAC. If zero, the latest key version is used.
+	Version int
+
+	// Message is the data for which the MAC is computed.
+	// Given the same master key, two different messages will
+	// result in two different MACs.
+	Message []byte
+}
+
+// MarshalPB converts the MACRequest into its protobuf representation.
+func (r *MACRequest) MarshalPB(v *pb.MACRequest) error {
+	v.Name = r.Name
+	v.Version = uint32(max(r.Version, 0))
+	v.Message = r.Message
+	return nil
+}
+
+// UnmarshalPB initializes the MACRequest from its protobuf representation.
+func (r *MACRequest) UnmarshalPB(v *pb.MACRequest) error {
+	r.Name = v.Name
+	r.Version = int(v.Version)
+	r.Message = v.Message
+	return nil
+}
+
 // DecryptRequest contains a ciphertext message that should be decrypted.
 type DecryptRequest struct {
 	// Name is the name of the master key.
