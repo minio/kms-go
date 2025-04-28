@@ -1170,7 +1170,7 @@ func (c *Client) Encrypt(ctx context.Context, enclave string, reqs ...*EncryptRe
 	}
 	defer resp.Body.Close()
 
-	return decodeResponse[pb.EncryptResponse, EncryptResponse](resp, cmds.KeyStatus)
+	return decodeResponse[pb.EncryptResponse, EncryptResponse](resp, cmds.KeyEncrypt)
 }
 
 // Decrypt decrypts the req.Ciphertext with the key req.Name within
