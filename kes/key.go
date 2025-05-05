@@ -32,6 +32,7 @@ type ImportKeyRequest struct {
 type DEK struct {
 	Plaintext  []byte
 	Ciphertext []byte
+	Version    string
 }
 
 // All valid cryptographic algorithms that can be used with keys.

@@ -410,6 +410,7 @@ func (c *Client) GenerateKey(ctx context.Context, name string, context []byte) (
 	type Response struct {
 		Plaintext  []byte `json:"plaintext"`
 		Ciphertext []byte `json:"ciphertext"`
+		Version    string `json:"version"` // Optional version
 	}
 
 	body, err := json.Marshal(Request{
@@ -494,7 +495,7 @@ func (c *Client) Encrypt(ctx context.Context, name string, plaintext, context []
 // Decrypt returns ErrKeyNotFound if no such key exists. It returns
 // ErrDecrypt when the ciphertext has been modified or a different
 // context value is provided.
-func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context []byte) ([]byte, error) {
+func (c *Client) Decrypt(ctx context.Context, name, version string, ciphertext, context []byte) ([]byte, error) {
 	const (
 		APIPath         = "/v1/key/decrypt"
 		Method          = http.MethodPost
@@ -506,6 +507,7 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 	type Request struct {
 		Ciphertext []byte `json:"ciphertext"`
 		Context    []byte `json:"context,omitempty"` // A context is optional
+		Version    string `json:"version,omitempty"` // Optional version
 	}
 	type Response struct {
 		Plaintext []byte `json:"plaintext"`
@@ -513,6 +515,7 @@ func (c *Client) Decrypt(ctx context.Context, name string, ciphertext, context [
 	body, err := json.Marshal(Request{
 		Ciphertext: ciphertext,
 		Context:    context,
+		Version:    version,
 	})
 	if err != nil {
 		return nil, err
