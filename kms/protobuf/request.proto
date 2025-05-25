@@ -65,6 +65,18 @@ message EditClusterRequest {
   repeated uint32 RemoveIDs = 2 [ json_name = "remove" ];
 }
 
+message ResealClusterRequest {}
+
+message AddHSMRequest {
+  // Name is the name of the HSM to be add.
+   string Name = 1 [ json_name = "name" ];
+}
+
+message RemoveHSMRequest {
+  // Name is the name of the HSM to be removed.
+  string Name = 1 [ json_name = "name" ];
+}
+
 message CreateEnclaveRequest {
     string Name = 1 [ json_name = "name" ];
 }

@@ -366,6 +366,53 @@ func (r *LogRequest) UnmarshalPB(v *pb.LogRequest) error {
 	return nil
 }
 
+// ResealClusterRequest contains options for resealing a cluster
+// with its HSMs.
+type ResealClusterRequest struct{}
+
+// MarshalPB converts the ResealClusterRequest into its protobuf representation.
+func (*ResealClusterRequest) MarshalPB(*pb.ResealClusterRequest) error { return nil }
+
+// UnmarshalPB initializes the ResealClusterRequest from its protobuf representation.
+func (*ResealClusterRequest) UnmarshalPB(*pb.ResealClusterRequest) error { return nil }
+
+// AddHSMRequest contains options for adding an HSM to protect the on-disk
+// state of the KMS cluster.
+type AddHSMRequest struct {
+	// Name is the name of the HSM to add.
+	Name string
+}
+
+// MarshalPB converts the AddHSMRequest into its protobuf representation.
+func (r *AddHSMRequest) MarshalPB(v *pb.AddHSMRequest) error {
+	v.Name = r.Name
+	return nil
+}
+
+// UnmarshalPB initializes the AddHSMRequest from its protobuf representation.
+func (r *AddHSMRequest) UnmarshalPB(v *pb.AddHSMRequest) error {
+	r.Name = v.Name
+	return nil
+}
+
+// RemoveHSMRequest contains options for removing an HSM.
+type RemoveHSMRequest struct {
+	// Name is the name of the HSM to remove.
+	Name string
+}
+
+// MarshalPB converts the RemoveHSMRequest into its protobuf representation.
+func (r *RemoveHSMRequest) MarshalPB(v *pb.RemoveHSMRequest) error {
+	v.Name = r.Name
+	return nil
+}
+
+// UnmarshalPB initializes the RemoveHSMRequest from its protobuf representation.
+func (r *RemoveHSMRequest) UnmarshalPB(v *pb.RemoveHSMRequest) error {
+	r.Name = v.Name
+	return nil
+}
+
 // CreateEnclaveRequest contains options for creating enclaves.
 type CreateEnclaveRequest struct {
 	// Name is the name of the enclave to create.
