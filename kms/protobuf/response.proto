@@ -122,6 +122,20 @@ message ServerStatusResponse {
   // The total amount of memory used by the KMS server process is HeapMemInUse +
   // StackMemInUse.
   uint64 StackMemInUse = 18 [ json_name="sys_mem_stack_used" ];
+ 
+  // HSMs is a list of all HSMs that are currently present OR protect the on-disk state
+  // of the KMS server.
+  //
+  // An HSM may protect the on-disk state but may not be present. Further, an HSM may be
+  // present but may not be actively used. For a list of HSMs that are present AND protect
+  // the on-disk state refer to ActiveHSMs.
+  repeated string HSMs = 19 [ json_name = "hsm" ];
+
+  // ActiveHSMs is a list of HSMs that are currently present AND protect the on-disk
+  // state of the KMS server. The first entry is refers to the HSM currently used by
+  // KMS server. Remaining entries refer to HSMs available to but not actively used
+  // by the KMS server.
+  repeated string ActiveHSMs = 20 [ json_name = "hsm_active"];
 }
 
 message ProfileStatusResponse {

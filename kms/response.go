@@ -255,6 +255,20 @@ type ServerStatusResponse struct {
 	// The total amount of memory used by the KMS server process is HeapMemInUse +
 	// StackMemInUse.
 	StackMemInUse uint64
+
+	// HSMs is a list of all HSMs that are currently present OR protect the on-disk state
+	// of the KMS server.
+	//
+	// An HSM may protect the on-disk state but may not be present. Further, an HSM may be
+	// present but may not be actively used. For a list of HSMs that are present AND protect
+	// the on-disk state refer to ActiveHSMs.
+	HSMs []string
+
+	// ActiveHSMs is a list of HSMs that are currently present AND protect the on-disk
+	// state of the KMS server. The first entry is refers to the HSM currently used by
+	// KMS server. Remaining entries refer to HSMs available to but not actively used
+	// by the KMS server.
+	ActiveHSMs []string
 }
 
 // MarshalPB converts the ServerStatusResponse into its protobuf representation.
@@ -280,6 +294,8 @@ func (s *ServerStatusResponse) MarshalPB(v *pb.ServerStatusResponse) error {
 	v.UsableCPUs = uint32(s.UsableCPUs)
 	v.HeapMemInUse = s.HeapMemInUse
 	v.StackMemInUse = s.StackMemInUse
+	v.HSMs = s.HSMs
+	v.ActiveHSMs = s.ActiveHSMs
 	return nil
 }
 
@@ -306,6 +322,8 @@ func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
 	s.UsableCPUs = uint(v.UsableCPUs)
 	s.HeapMemInUse = v.HeapMemInUse
 	s.StackMemInUse = v.StackMemInUse
+	s.HSMs = v.HSMs
+	s.ActiveHSMs = v.ActiveHSMs
 	return nil
 }
 

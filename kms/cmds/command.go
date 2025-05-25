@@ -15,6 +15,9 @@ const (
 	ClusterRemoveNode Command = 2
 	ClusterStatus     Command = 3
 	ClusterEdit       Command = 4
+	ClusterAddHSM     Command = 5
+	ClusterRemoveHSM  Command = 6
+	ClusterReseal     Command = 7
 
 	EnclaveCreate Command = 101
 	EnclaveDelete Command = 102
@@ -45,6 +48,7 @@ const (
 	IdentityList   Command = 404
 )
 
+// Parse parses s as a string representation of a Command.
 func Parse(s string) (Command, error) {
 	c, ok := textCmds[strings.ToUpper(s)]
 	if !ok {
@@ -63,6 +67,16 @@ type Command uint16
 // "read-only" or "write-only" commands.
 func (c Command) IsWrite() bool {
 	_, ok := isWrite[c]
+	return ok
+}
+
+// IsCluster reports whether c operates on a cluster-level
+// instead of within a specific enclave.
+//
+// Cluster-level commands usually require SysAdmin privileges
+// and cannot be performed by enclave admins or regular users.
+func (c Command) IsCluster() bool {
+	_, ok := isCluster[c]
 	return ok
 }
 
@@ -104,6 +118,9 @@ var isWrite = map[Command]struct{}{ // Commands that change state on a KMS serve
 	ClusterAddNode:    {},
 	ClusterRemoveNode: {},
 	ClusterEdit:       {},
+	ClusterAddHSM:     {},
+	ClusterRemoveHSM:  {},
+	ClusterReseal:     {},
 
 	EnclaveCreate: {},
 	EnclaveDelete: {},
@@ -120,11 +137,29 @@ var isWrite = map[Command]struct{}{ // Commands that change state on a KMS serve
 	IdentityDelete: {},
 }
 
+var isCluster = map[Command]struct{}{ // Commands that operate on a cluster-level and require sysadmin privileges
+	ClusterAddNode:    {},
+	ClusterRemoveNode: {},
+	ClusterStatus:     {},
+	ClusterEdit:       {},
+	ClusterAddHSM:     {},
+	ClusterRemoveHSM:  {},
+	ClusterReseal:     {},
+
+	EnclaveCreate: {},
+	EnclaveDelete: {},
+	EnclaveStatus: {},
+	EnclaveList:   {},
+}
+
 var cmdTexts = map[Command]string{
 	ClusterAddNode:    "CLUSTER:ADDNODE",
 	ClusterRemoveNode: "CLUSTER:REMOVENODE",
 	ClusterStatus:     "CLUSTER:STATUS",
 	ClusterEdit:       "CLUSTER:EDIT",
+	ClusterAddHSM:     "CLUSTER:ADDHSM",
+	ClusterRemoveHSM:  "CLUSTER:REMOVEHSM",
+	ClusterReseal:     "CLUSTER:RESEAL",
 
 	EnclaveCreate: "ENCLAVE:CREATE",
 	EnclaveDelete: "ENCLAVE:DELETE",
@@ -159,6 +194,9 @@ var textCmds = map[string]Command{
 	"CLUSTER:REMOVENODE": ClusterRemoveNode,
 	"CLUSTER:STATUS":     ClusterStatus,
 	"CLUSTER:EDIT":       ClusterEdit,
+	"CLUSTER:ADDHSM":     ClusterAddHSM,
+	"CLUSTER:REMOVEHSM":  ClusterRemoveHSM,
+	"CLUSTER:RESEAL":     ClusterReseal,
 
 	"ENCLAVE:CREATE": EnclaveCreate,
 	"ENCLAVE:DELETE": EnclaveDelete,

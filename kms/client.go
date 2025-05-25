@@ -615,6 +615,28 @@ func (c *Client) EditCluster(ctx context.Context, req *EditClusterRequest) error
 	return resp.Body.Close()
 }
 
+// ResealCluster re-seals the cluster's on-disk state with the active HSMs.
+// It returns an error if an active HSM fails to re-seal the cluster's root
+// encryption key. For example, when the HSM is currently not available.
+//
+// It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
+func (c *Client) ResealCluster(ctx context.Context, req *ResealClusterRequest) error {
+	body, err := cmds.Encode(nil, cmds.ClusterReseal, req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.Send(ctx, &Request{
+		Body: body,
+	})
+	if err != nil {
+		return err
+	}
+	return resp.Body.Close()
+}
+
 // AddNode adds the KMS server at req.Host to the current KMS cluster.
 // It returns an error if the server is already part of the cluster.
 //
@@ -849,6 +871,53 @@ func (c *Client) Logs(ctx context.Context, req *LogRequest) (*LogResponse, error
 		r:   resp.Body,
 		buf: make([]byte, 4*mem.KiB),
 	}, nil
+}
+
+// AddHSM seals the cluster's on-disk state with the HSM referenced by req.Name.
+//
+// The cluster must already be configured with the HSM. Hence, AddHSM can only
+// add HSMs that have been removed using RemoveHSM.
+//
+// It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
+func (c *Client) AddHSM(ctx context.Context, req *AddHSMRequest) error {
+	body, err := cmds.Encode(nil, cmds.ClusterAddHSM, req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.Send(ctx, &Request{
+		Body: body,
+	})
+	if err != nil {
+		return err
+	}
+	return resp.Body.Close()
+}
+
+// RemoveHSM removes any sealed root encryption key associated with the HSM
+// referenced by req.Name. It does not remove the HSM configuration from the
+// cluster. Once removed, the specified HSM can no longer be used to unseal
+// the on-disk state. However, the HSM can added again via AddHSM as long as
+// the HSM configuration is present on the cluster.
+//
+// It requires SysAdmin privileges.
+//
+// The returned error is of type *HostError.
+func (c *Client) RemoveHSM(ctx context.Context, req *RemoveHSMRequest) error {
+	body, err := cmds.Encode(nil, cmds.ClusterRemoveHSM, req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.Send(ctx, &Request{
+		Body: body,
+	})
+	if err != nil {
+		return err
+	}
+	return resp.Body.Close()
 }
 
 // CreateEnclave creates a new enclave with the name req.Name.
