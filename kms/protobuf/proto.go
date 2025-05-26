@@ -4,6 +4,11 @@
 
 package protobuf
 
+//go:generate protoc --go_out=../ ./log.proto
+//go:generate protoc --go_out=../ ./rule.proto
+//go:generate protoc --go_out=../ ./request.proto
+//go:generate protoc --go_out=../ ./response.proto
+
 import (
 	"time"
 

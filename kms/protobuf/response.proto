@@ -2,21 +2,15 @@
 // Use of this source code is governed by the AGPLv3
 // license that can be found in the LICENSE file.
 
-// Generate the Go protobuf code by running the protobuf compiler
-// from the repository root:
-//
-//   $ protoc -I=./kms/protobuf --go_out=. ./kms/protobuf/*.proto
-
 syntax = "proto3";
 
 package minio.kms;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
-
 import "rule.proto";
 
-option go_package = "kms/protobuf";
+option go_package = "/protobuf";
 
 message ErrResponse {
   string Message = 1 [json_name="message" ];
