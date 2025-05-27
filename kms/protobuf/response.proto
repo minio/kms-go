@@ -117,19 +117,22 @@ message ServerStatusResponse {
   // StackMemInUse.
   uint64 StackMemInUse = 18 [ json_name="sys_mem_stack_used" ];
  
-  // HSMs is a list of all HSMs that are currently present OR protect the on-disk state
-  // of the KMS server.
-  //
-  // An HSM may protect the on-disk state but may not be present. Further, an HSM may be
-  // present but may not be actively used. For a list of HSMs that are present AND protect
-  // the on-disk state refer to ActiveHSMs.
+  // HSMs is a list of all HSMs for which a sealed root encryption key entry is present
+  // at the KMS server.
+  // 
+  // A KMS server may have multiple sealed root encryption key entries, and therefore,
+  // multiple HSMs can be used to unseal its on-disk state. However, not all HSMs may be
+  // configured at the same time. Hence, this list shows which HSMs could be used to unseal
+  // the on-disk state given a corresponding HSM configuration.
   repeated string HSMs = 19 [ json_name = "hsm" ];
 
-  // ActiveHSMs is a list of HSMs that are currently present AND protect the on-disk
-  // state of the KMS server. The first entry is refers to the HSM currently used by
-  // KMS server. Remaining entries refer to HSMs available to but not actively used
-  // by the KMS server.
-  repeated string ActiveHSMs = 20 [ json_name = "hsm_active"];
+  // ConfiguredHSMs is a list of HSMs for which a HSM configuration is present at the
+  // KMS server.
+  //
+  // A KMS server may have multiple HSM configurations but a sealed root encryption key
+  // entry may not exist for all of them. For example, one particular entry may got removed
+  // but the HSM configuration itself is still present.
+  repeated string ConfiguredHSMs = 20 [ json_name = "hsm_active"];
 }
 
 message ProfileStatusResponse {
