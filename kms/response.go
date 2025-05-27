@@ -256,19 +256,22 @@ type ServerStatusResponse struct {
 	// StackMemInUse.
 	StackMemInUse uint64
 
-	// HSMs is a list of all HSMs that are currently present OR protect the on-disk state
-	// of the KMS server.
+	// HSMs is a list of all HSMs for which a sealed root encryption key entry is present
+	// at the KMS server.
 	//
-	// An HSM may protect the on-disk state but may not be present. Further, an HSM may be
-	// present but may not be actively used. For a list of HSMs that are present AND protect
-	// the on-disk state refer to ActiveHSMs.
+	// A KMS server may have multiple sealed root encryption key entries, and therefore,
+	// multiple HSMs can be used to unseal its on-disk state. However, not all HSMs may be
+	// configured at the same time. Hence, this list shows which HSMs could be used to unseal
+	// the on-disk state given a corresponding HSM configuration.
 	HSMs []string
 
-	// ActiveHSMs is a list of HSMs that are currently present AND protect the on-disk
-	// state of the KMS server. The first entry is refers to the HSM currently used by
-	// KMS server. Remaining entries refer to HSMs available to but not actively used
-	// by the KMS server.
-	ActiveHSMs []string
+	// ConfiguredHSMs is a list of HSMs for which a HSM configuration is present at the
+	// KMS server.
+	//
+	// A KMS server may have multiple HSM configurations but a sealed root encryption key
+	// entry may not exist for all of them. For example, one particular entry may got removed
+	// but the HSM configuration itself is still present.
+	ConfiguredHSMs []string
 }
 
 // MarshalPB converts the ServerStatusResponse into its protobuf representation.
@@ -295,7 +298,7 @@ func (s *ServerStatusResponse) MarshalPB(v *pb.ServerStatusResponse) error {
 	v.HeapMemInUse = s.HeapMemInUse
 	v.StackMemInUse = s.StackMemInUse
 	v.HSMs = s.HSMs
-	v.ActiveHSMs = s.ActiveHSMs
+	v.ConfiguredHSMs = s.ConfiguredHSMs
 	return nil
 }
 
@@ -323,7 +326,7 @@ func (s *ServerStatusResponse) UnmarshalPB(v *pb.ServerStatusResponse) error {
 	s.HeapMemInUse = v.HeapMemInUse
 	s.StackMemInUse = v.StackMemInUse
 	s.HSMs = v.HSMs
-	s.ActiveHSMs = v.ActiveHSMs
+	s.ConfiguredHSMs = v.ConfiguredHSMs
 	return nil
 }
 
