@@ -17,7 +17,6 @@ const (
 	ClusterEdit       Command = 4
 	ClusterAddHSM     Command = 5
 	ClusterRemoveHSM  Command = 6
-	ClusterReseal     Command = 7
 
 	EnclaveCreate Command = 101
 	EnclaveDelete Command = 102
@@ -120,7 +119,6 @@ var isWrite = map[Command]struct{}{ // Commands that change state on a KMS serve
 	ClusterEdit:       {},
 	ClusterAddHSM:     {},
 	ClusterRemoveHSM:  {},
-	ClusterReseal:     {},
 
 	EnclaveCreate: {},
 	EnclaveDelete: {},
@@ -144,7 +142,6 @@ var isCluster = map[Command]struct{}{ // Commands that operate on a cluster-leve
 	ClusterEdit:       {},
 	ClusterAddHSM:     {},
 	ClusterRemoveHSM:  {},
-	ClusterReseal:     {},
 
 	EnclaveCreate: {},
 	EnclaveDelete: {},
@@ -159,7 +156,6 @@ var cmdTexts = map[Command]string{
 	ClusterEdit:       "CLUSTER:EDIT",
 	ClusterAddHSM:     "CLUSTER:ADDHSM",
 	ClusterRemoveHSM:  "CLUSTER:REMOVEHSM",
-	ClusterReseal:     "CLUSTER:RESEAL",
 
 	EnclaveCreate: "ENCLAVE:CREATE",
 	EnclaveDelete: "ENCLAVE:DELETE",
@@ -196,7 +192,6 @@ var textCmds = map[string]Command{
 	"CLUSTER:EDIT":       ClusterEdit,
 	"CLUSTER:ADDHSM":     ClusterAddHSM,
 	"CLUSTER:REMOVEHSM":  ClusterRemoveHSM,
-	"CLUSTER:RESEAL":     ClusterReseal,
 
 	"ENCLAVE:CREATE": EnclaveCreate,
 	"ENCLAVE:DELETE": EnclaveDelete,
