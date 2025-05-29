@@ -615,28 +615,6 @@ func (c *Client) EditCluster(ctx context.Context, req *EditClusterRequest) error
 	return resp.Body.Close()
 }
 
-// ResealCluster re-seals the cluster's on-disk state with the active HSMs.
-// It returns an error if an active HSM fails to re-seal the cluster's root
-// encryption key. For example, when the HSM is currently not available.
-//
-// It requires SysAdmin privileges.
-//
-// The returned error is of type *HostError.
-func (c *Client) ResealCluster(ctx context.Context, req *ResealClusterRequest) error {
-	body, err := cmds.Encode(nil, cmds.ClusterReseal, req)
-	if err != nil {
-		return err
-	}
-
-	resp, err := c.Send(ctx, &Request{
-		Body: body,
-	})
-	if err != nil {
-		return err
-	}
-	return resp.Body.Close()
-}
-
 // AddNode adds the KMS server at req.Host to the current KMS cluster.
 // It returns an error if the server is already part of the cluster.
 //
