@@ -64,12 +64,22 @@ func NewClient(conf *Config) (*Client, error) {
 		return nil, errors.New("kms: invalid config: 'APIKey' and 'TLS.GetClientCertificate' are present")
 	}
 
-	tlsConf := conf.TLS.Clone()
+	tlsConf := conf.TLS
 	if conf.APIKey != nil {
 		cert, err := GenerateCertificate(conf.APIKey, nil)
 		if err != nil {
 			return nil, err
 		}
+
+		// ensure that the TLS configuration is not nil and
+		// the TLS configuration is cloned to avoid
+		// modifying the original TLS configuration.
+		if tlsConf == nil {
+			tlsConf = &tls.Config{}
+		} else {
+			tlsConf = tlsConf.Clone()
+		}
+
 		tlsConf.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			return &cert, nil
 		}
