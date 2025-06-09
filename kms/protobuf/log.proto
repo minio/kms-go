@@ -22,21 +22,6 @@ message LogRecord {
     uint32 Line = 3 [ json_name = "line" ];
   }
 
-  message Request {
-    // HTTP method of the request that caused this event.
-    string Method = 1 [ json_name = "method" ];
-
-    // URL path of the request that caused this event.
-    string Path = 2 [ json_name = "path" ];
-
-    // Identity of the request that caused this event.
-    string Identity = 3 [ json_name = "identity" ];
-    
-    // IP address of the client sending the request that
-    // caused this event.
-    string IP = 4 [ json_name = "ip" ];
-  }
-
   // The log level of the event.
   sint32 Level = 1 [ json_name="level" ];
 
@@ -53,7 +38,4 @@ message LogRecord {
   //
   // If empty, no stack trace has been captured.
   repeated StackFrame Trace = 4 [ json_name = "trace" ];
-
-  // HTTP request information
-  Request Req = 5 [ json_name = "request" ];
 }

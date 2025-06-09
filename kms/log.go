@@ -9,10 +9,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/netip"
 	"time"
 
-	"aead.dev/mtls"
 	pb "github.com/minio/kms-go/kms/protobuf"
 )
 
@@ -30,40 +28,35 @@ type StackFrame struct {
 	Line int
 }
 
-// LogRecord is a structure representing a KMS log event.
+// MarshalPB converts the StackFrame into its protobuf representation.
+func (s *StackFrame) MarshalPB(v *pb.LogRecord_StackFrame) error {
+	v.Function = s.Function
+	v.File = s.File
+	v.Line = uint32(s.Line)
+	return nil
+}
+
+// UnmarshalPB initializes the StackFrame from its protobuf representation.
+func (s *StackFrame) UnmarshalPB(v *pb.LogRecord_StackFrame) error {
+	s.Function = v.Function
+	s.File = v.File
+	s.Line = int(v.Line)
+	return nil
+}
+
+// LogRecord is a structure representing a KMS server log record.
 type LogRecord struct {
-	// The log level of the event.
-	Level slog.Level
+	Level   slog.Level // The log level of the record.
+	Message string     // The log message.
+	Time    time.Time  // The time at which the record was created.
 
-	// The log message.
-	Message string
-
-	// The time at which the event was produced.
-	Time time.Time
-
-	// The stack trace at the time the event was recorded.
-	// Its first frame is the location at which this event
-	// was produced and subsequent frames represent function
-	// calls higher up the call stack.
+	// Trace is stack trace of function calls. Its first frame
+	// is the location at which this record was created and
+	// subsequent frames represent function calls higher up the
+	// call stack.
 	//
 	// If empty, no stack trace has been captured.
 	Trace []StackFrame
-
-	// If non-empty, HTTP method of the request that caused
-	// this event.
-	Method string
-
-	// If non-empty, URL path of the request that caused
-	// this event.
-	Path string
-
-	// If non-empty, identity of the request that caused
-	// this event.
-	Identity mtls.Identity
-
-	// If valid, IP address of the client sending the
-	// request that caused this event.
-	IP netip.Addr
 }
 
 // MarshalPB converts the LogRecord into its protobuf representation.
@@ -74,20 +67,12 @@ func (r *LogRecord) MarshalPB(v *pb.LogRecord) error {
 
 	if len(r.Trace) > 0 {
 		v.Trace = make([]*pb.LogRecord_StackFrame, 0, len(r.Trace))
-		for _, t := range r.Trace {
+		for _, frame := range r.Trace {
 			v.Trace = append(v.Trace, &pb.LogRecord_StackFrame{
-				Function: t.Function,
-				File:     t.File,
-				Line:     uint32(t.Line),
+				Function: frame.Function,
+				File:     frame.File,
+				Line:     uint32(frame.Line),
 			})
-		}
-	}
-	if r.Method != "" || r.Path != "" || r.Identity != (mtls.Identity{}) || r.IP.IsValid() {
-		v.Req = &pb.LogRecord_Request{
-			Method:   r.Method,
-			Path:     r.Path,
-			Identity: r.Identity.String(),
-			IP:       r.IP.String(),
 		}
 	}
 	return nil
@@ -95,40 +80,21 @@ func (r *LogRecord) MarshalPB(v *pb.LogRecord) error {
 
 // UnmarshalPB initializes the LogRecord from its protobuf representation.
 func (r *LogRecord) UnmarshalPB(v *pb.LogRecord) error {
-	var (
-		ip netip.Addr
-		id mtls.Identity
-	)
-	if v.Req != nil {
-		var err error
-		if ip, err = netip.ParseAddr(v.Req.IP); err != nil {
-			return err
-		}
-	}
-	if v.Req.Identity != "" {
-		var err error
-		if id, err = mtls.ParseIdentity(v.Req.Identity); err != nil {
-			return err
-		}
-	}
-
 	r.Level = slog.Level(v.Level)
 	r.Message = v.Message
 	r.Time = v.Time.AsTime()
+	r.Trace = nil
 
-	r.Trace = make([]StackFrame, 0, len(v.Trace))
-	for _, t := range v.GetTrace() {
-		r.Trace = append(r.Trace, StackFrame{
-			Function: t.Function,
-			File:     t.File,
-			Line:     int(t.Line),
-		})
+	if len(v.Trace) > 0 {
+		r.Trace = make([]StackFrame, 0, len(v.Trace))
+		for _, frame := range v.Trace {
+			r.Trace = append(r.Trace, StackFrame{
+				Function: frame.Function,
+				File:     frame.File,
+				Line:     int(frame.Line),
+			})
+		}
 	}
-
-	r.Method = v.Req.GetMethod()
-	r.Path = v.Req.GetPath()
-	r.Identity = id
-	r.IP = ip
 	return nil
 }
 

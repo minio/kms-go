@@ -100,21 +100,9 @@ message LogRequest {
   // ignores any timestamps newer then its current time.
   google.protobuf.Timestamp Since = 3 [ json_name = "since" ];
 
-  // The server only sends only log records with this request method.
-  string Method = 4 [ json_name = "method" ];
-
-  // The server sends only log records with this request path.
-  string Path = 5 [ json_name = "path" ];
-
-  // The servers sends only log records with this identity.
-  string Identity = 6 [ json_name = "identity" ];
-  
-  // The server sends only log records with this IP address.
-  string IP = 7 [ json_name = "ip" ];
-
   // The server sends only stack traces for records with an
   // equal or greater log level.
-  sint32 TraceLevel = 8 [ json_name = "trace_level" ];
+  sint32 TraceLevel = 4 [ json_name = "trace_level" ];
 }
 
 message CreateKeyRequest {
