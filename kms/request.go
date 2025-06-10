@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/netip"
 	"time"
 
 	"aead.dev/mtls"
@@ -283,7 +282,7 @@ func (r *EditClusterRequest) UnmarshalPB(v *pb.EditClusterRequest) error {
 	return nil
 }
 
-// LogRequest contains options for fetching server logs.
+// LogRequest contains options for fetching KMS server logs.
 // It allows filtering for more specific log records.
 type LogRequest struct {
 	// Host is the KMS server from which logs are fetched.
@@ -302,18 +301,6 @@ type LogRequest struct {
 	// ignores any timestamps newer then its current time.
 	Since time.Time
 
-	// The server only sends only log records with this request method.
-	Method string
-
-	// The server sends only log records with this request path.
-	Path string
-
-	// The servers sends only log records with this identity.
-	Identity mtls.Identity
-
-	// The server sends only log records with this IP address.
-	IP netip.Addr
-
 	// The server sends only stack traces for records with an
 	// equal or greater log level.
 	TraceLevel slog.Level
@@ -324,44 +311,15 @@ func (r *LogRequest) MarshalPB(v *pb.LogRequest) error {
 	v.Level = int32(r.Level)
 	v.Message = r.Message
 	v.Since = pb.Time(r.Since)
-	v.Method = r.Method
-	v.Path = r.Path
-	v.Identity = r.Identity.String()
-	if r.IP.IsValid() {
-		v.IP = r.IP.String()
-	} else {
-		v.IP = ""
-	}
 	v.TraceLevel = int32(r.TraceLevel)
 	return nil
 }
 
 // UnmarshalPB initializes the LogRequest from its protobuf representation.
 func (r *LogRequest) UnmarshalPB(v *pb.LogRequest) error {
-	var (
-		ip netip.Addr
-		id mtls.Identity
-	)
-	if v.IP != "" {
-		var err error
-		if ip, err = netip.ParseAddr(v.IP); err != nil {
-			return err
-		}
-	}
-	if v.Identity != "" {
-		var err error
-		if id, err = mtls.ParseIdentity(v.Identity); err != nil {
-			return err
-		}
-	}
-
 	r.Level = slog.Level(v.Level)
 	r.Message = v.Message
 	r.Since = v.Since.AsTime()
-	r.Method = v.Method
-	r.Path = v.Path
-	r.Identity = id
-	r.IP = ip
 	r.TraceLevel = slog.Level(v.TraceLevel)
 	return nil
 }
