@@ -422,6 +422,70 @@ func (c *Client) Ready(ctx context.Context, req *ReadinessRequest) error {
 	return errors.Join(errs...)
 }
 
+// Restart restarts one or multiple KMS servers. If req.Hosts is empty,
+// all known servers are restarted.
+//
+// Depending on the OS, a KMS server may not support restarting itself.
+//
+// For a single host, Restart returns nil or a HostError wrapping the
+// encountered error.
+//
+// For multiple hosts, Restart only returns nil if all hosts are restarted.
+// If restarting some hosts fails, it returns a joined error that implements
+// the "Unwrap() []error" interface. Each of these errors are of type HostError.
+func (c *Client) Restart(ctx context.Context, req *RestartRequest) error {
+	const (
+		Method   = http.MethodPost
+		Path     = api.PathRestart
+		StatusOK = http.StatusOK
+	)
+	restart := func(ctx context.Context, endpoint string) error {
+		url, err := url.JoinPath(httpsURL(endpoint), Path)
+		if err != nil {
+			return hostError(endpoint, err)
+		}
+
+		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
+		if err != nil {
+			return hostError(endpoint, err)
+		}
+		r.Header.Set(headers.Accept, headers.ContentTypeAppAny)
+
+		resp, err := c.direct.Do(r)
+		if err != nil {
+			return hostError(endpoint, err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != StatusOK {
+			return hostError(endpoint, readError(resp))
+		}
+		return nil
+	}
+
+	endpoints := req.Hosts
+	if len(endpoints) == 0 {
+		endpoints = c.lb.Hosts
+	}
+	if len(endpoints) == 1 {
+		return restart(ctx, endpoints[0])
+	}
+
+	errs := make([]error, len(endpoints))
+	var wg sync.WaitGroup
+	for i := range endpoints {
+		wg.Add(1)
+
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = restart(ctx, endpoints[i])
+		}(i)
+	}
+	wg.Wait()
+
+	return errors.Join(errs...)
+}
+
 // StartProfiling enables profiling on req.Host. A client must call
 // StopProfiling to stop the profiling again and obtain the resutls.
 // The ProfileRequest specifies which types of profiles should be

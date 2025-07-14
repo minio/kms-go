@@ -127,6 +127,14 @@ type ReadinessRequest struct {
 	Write bool
 }
 
+// RestartRequest contains options for restarting
+// one or multiple KMS servers.
+type RestartRequest struct {
+	// List of endpoints which get restarted. If empty,
+	// the client restarts all known servers.
+	Hosts []string
+}
+
 // ServerStatusRequest contains options for fetching status
 // information for one particular KMS server.
 type ServerStatusRequest struct {

@@ -14,9 +14,7 @@ const (
 	PathHealthLive  = "/v1/health/live"  // Unprivileged by default - liveness check
 	PathHealthReady = "/v1/health/ready" // Unprivileged by default - readiness check
 
-	PathHealthStatus = "/v1/health/status"
-	PathHealthAPIs   = "/v1/health/api"
-
+	PathRestart = "/v1/debug/restart"
 	PathProfile = "/v1/debug/pprof"
 	PathLog     = "/v1/debug/log"
 
