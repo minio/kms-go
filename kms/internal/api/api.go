@@ -29,5 +29,6 @@ const (
 
 // API query parameters supported by KMS servers.
 const (
-	QueryReadyWrite = "write"
+	QueryReadyWrite  = "write"
+	QueryRestartSelf = "self"
 )

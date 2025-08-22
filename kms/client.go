@@ -423,7 +423,12 @@ func (c *Client) Ready(ctx context.Context, req *ReadinessRequest) error {
 }
 
 // Restart restarts one or multiple KMS servers. If req.Hosts is empty,
-// all known servers are restarted.
+// all servers that are part of the same cluster are restarted.
+//
+// There are two ways to restart all nodes within a cluster. When req.Hosts
+// is empty, one node restarts all its peers before restarting itself.
+// When req.Hosts is a list of all server nodes then each node is restarted
+// by the client.
 //
 // Depending on the OS, a KMS server may not support restarting itself.
 //
@@ -435,15 +440,44 @@ func (c *Client) Ready(ctx context.Context, req *ReadinessRequest) error {
 // the "Unwrap() []error" interface. Each of these errors are of type HostError.
 func (c *Client) Restart(ctx context.Context, req *RestartRequest) error {
 	const (
-		Method   = http.MethodPost
-		Path     = api.PathRestart
-		StatusOK = http.StatusOK
+		Method    = http.MethodPost
+		Path      = api.PathRestart
+		QuerySelf = api.QueryRestartSelf // Used to restart only a single node
+		StatusOK  = http.StatusOK
 	)
+
+	// If no hosts are specified, we call the restart API on an arbitrary
+	// host and let it restart all its peers. Otherwise, we restart each
+	// host on its own without doing a cluster-wide restart.
+	if len(req.Hosts) == 0 {
+		url, host, err := c.lb.URL(Path)
+		if err != nil {
+			return hostError(host, err)
+		}
+		req, err := http.NewRequestWithContext(ctx, Method, url, nil)
+		if err != nil {
+			return hostError(host, err)
+		}
+		req.Header.Set(headers.Accept, headers.ContentTypeAppAny)
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return hostError(host, err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != StatusOK {
+			return hostError(host, readError(resp))
+		}
+		return nil
+	}
+
 	restart := func(ctx context.Context, endpoint string) error {
 		url, err := url.JoinPath(httpsURL(endpoint), Path)
 		if err != nil {
 			return hostError(endpoint, err)
 		}
+		url += "?" + QuerySelf // Only restart this particular node
 
 		r, err := http.NewRequestWithContext(ctx, Method, url, nil)
 		if err != nil {
@@ -463,22 +497,18 @@ func (c *Client) Restart(ctx context.Context, req *RestartRequest) error {
 		return nil
 	}
 
-	endpoints := req.Hosts
-	if len(endpoints) == 0 {
-		endpoints = c.lb.Hosts
-	}
-	if len(endpoints) == 1 {
-		return restart(ctx, endpoints[0])
+	if len(req.Hosts) == 1 {
+		return restart(ctx, req.Hosts[0])
 	}
 
-	errs := make([]error, len(endpoints))
+	errs := make([]error, len(req.Hosts))
 	var wg sync.WaitGroup
-	for i := range endpoints {
+	for i, host := range req.Hosts {
 		wg.Add(1)
 
 		go func(i int) {
 			defer wg.Done()
-			errs[i] = restart(ctx, endpoints[i])
+			errs[i] = restart(ctx, host)
 		}(i)
 	}
 	wg.Wait()
