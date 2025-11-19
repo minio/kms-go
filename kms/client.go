@@ -50,6 +50,14 @@ type Config struct {
 	// If no API key is set, either a TLS.Certificates
 	// or TLS.GetClientCertificate must be present.
 	TLS *tls.Config
+
+	// Optional RoundTripper wrapper function. If set, this function
+	// will be called with the base http.Transport, and should return
+	// a wrapped RoundTripper (e.g., for metrics collection).
+	// The wrapper will be inserted between the LoadBalancer and the
+	// base transport, allowing it to observe all requests with their
+	// selected endpoints.
+	WrapRoundTripper func(http.RoundTripper) http.RoundTripper
 }
 
 // NewClient returns a new Client with the given configuration.
@@ -96,22 +104,29 @@ func NewClient(conf *Config) (*Client, error) {
 		hosts = []string{"127.0.0.1:7373"}
 	}
 
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConnsPerHost:   50,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       tlsConf,
+	}
+
+	rt := http.RoundTripper(transport)
+	if conf.WrapRoundTripper != nil {
+		rt = conf.WrapRoundTripper(transport)
+	}
+
 	lb := &https.LoadBalancer{
-		Hosts: hosts,
-		RoundTripper: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConnsPerHost:   50,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			TLSClientConfig:       tlsConf,
-		},
+		Hosts:        hosts,
+		RoundTripper: rt,
 	}
 	return &Client{
 		direct: http.Client{Transport: lb.RoundTripper},
