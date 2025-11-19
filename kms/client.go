@@ -51,18 +51,15 @@ type Config struct {
 	// or TLS.GetClientCertificate must be present.
 	TLS *tls.Config
 
-	// Optional RoundTripper wrapper function. If set, this function
-	// will be called with the base http.Transport, and should return
-	// a wrapped RoundTripper (e.g., for metrics collection).
-	// The wrapper will be inserted between the LoadBalancer and the
-	// base transport, allowing it to observe all requests with their
-	// selected endpoints.
-	WrapRoundTripper func(http.RoundTripper) http.RoundTripper
+	// Optional custom RoundTripper. If set, used as-is without modification.
+	// Caller must fully configure TLS (including client cert for APIKey auth).
+	// If nil, a default http.Transport is created with TLS from Config.TLS/APIKey.
+	Transport http.RoundTripper
 }
 
 // NewClient returns a new Client with the given configuration.
 func NewClient(conf *Config) (*Client, error) {
-	if conf.APIKey == nil && (conf.TLS == nil || (len(conf.TLS.Certificates) == 0 && conf.TLS.GetClientCertificate == nil)) {
+	if conf.Transport == nil && conf.APIKey == nil && (conf.TLS == nil || (len(conf.TLS.Certificates) == 0 && conf.TLS.GetClientCertificate == nil)) {
 		return nil, errors.New("kms: invalid config: no API key or TLS client certificate provided")
 	}
 	if conf.APIKey != nil && conf.TLS != nil && len(conf.TLS.Certificates) > 0 {
@@ -120,8 +117,8 @@ func NewClient(conf *Config) (*Client, error) {
 	}
 
 	rt := http.RoundTripper(transport)
-	if conf.WrapRoundTripper != nil {
-		rt = conf.WrapRoundTripper(transport)
+	if conf.Transport != nil {
+		rt = conf.Transport
 	}
 
 	lb := &https.LoadBalancer{
