@@ -50,12 +50,27 @@ type Config struct {
 	// If no API key is set, either a TLS.Certificates
 	// or TLS.GetClientCertificate must be present.
 	TLS *tls.Config
+
+	// Optional custom Transport specifying the mechanism
+	// by which individual HTTP requests are made. If empty,
+	// a default transport is used.
+	//
+	// A custom Transport cannot be used in combination with
+	// an APIKey or TLS config. It's the users responsibility
+	// to set a TLS configuration on the custom Transport.
+	Transport http.RoundTripper
 }
 
 // NewClient returns a new Client with the given configuration.
 func NewClient(conf *Config) (*Client, error) {
-	if conf.APIKey == nil && (conf.TLS == nil || (len(conf.TLS.Certificates) == 0 && conf.TLS.GetClientCertificate == nil)) {
-		return nil, errors.New("kms: invalid config: no API key or TLS client certificate provided")
+	if conf.Transport != nil && (conf.APIKey != nil || conf.TLS != nil) {
+		// We must not modify the TLSClientConfig of a custom Transport (even if we type-assert that it's  *http.Transport).
+		// Hence, we cannot allow a custom Transport in combination with a APIKey or custom TLS config. Users that want
+		// to use a custom Transport have to create a proper TLS config themselves.
+		return nil, errors.New("kms: invalid config: cannot use custom Transport with APIKey or TLS config")
+	}
+	if conf.APIKey == nil && (conf.TLS == nil || (len(conf.TLS.Certificates) == 0 && conf.TLS.GetClientCertificate == nil)) && conf.Transport == nil {
+		return nil, errors.New("kms: invalid config: no API key, TLS client certificate or custom Transport provided")
 	}
 	if conf.APIKey != nil && conf.TLS != nil && len(conf.TLS.Certificates) > 0 {
 		return nil, errors.New("kms: invalid config: 'APIKey' and 'TLS.Certificates' are present")
@@ -64,24 +79,41 @@ func NewClient(conf *Config) (*Client, error) {
 		return nil, errors.New("kms: invalid config: 'APIKey' and 'TLS.GetClientCertificate' are present")
 	}
 
-	tlsConf := conf.TLS
-	if conf.APIKey != nil {
-		cert, err := GenerateCertificate(conf.APIKey, nil)
-		if err != nil {
-			return nil, err
-		}
+	transport := conf.Transport
+	if transport == nil {
+		tlsConf := conf.TLS
+		if conf.APIKey != nil {
+			cert, err := GenerateCertificate(conf.APIKey, nil)
+			if err != nil {
+				return nil, err
+			}
 
-		// ensure that the TLS configuration is not nil and
-		// the TLS configuration is cloned to avoid
-		// modifying the original TLS configuration.
-		if tlsConf == nil {
-			tlsConf = &tls.Config{}
-		} else {
-			tlsConf = tlsConf.Clone()
-		}
+			// ensure that the TLS configuration is not nil and
+			// the TLS configuration is cloned to avoid
+			// modifying the original TLS configuration.
+			if tlsConf == nil {
+				tlsConf = &tls.Config{}
+			} else {
+				tlsConf = tlsConf.Clone()
+			}
 
-		tlsConf.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			return &cert, nil
+			tlsConf.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				return &cert, nil
+			}
+		}
+		transport = &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConnsPerHost:   50,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			TLSClientConfig:       tlsConf,
 		}
 	}
 
@@ -97,21 +129,8 @@ func NewClient(conf *Config) (*Client, error) {
 	}
 
 	lb := &https.LoadBalancer{
-		Hosts: hosts,
-		RoundTripper: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConnsPerHost:   50,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			TLSClientConfig:       tlsConf,
-		},
+		Hosts:        hosts,
+		RoundTripper: transport,
 	}
 	return &Client{
 		direct: http.Client{Transport: lb.RoundTripper},
