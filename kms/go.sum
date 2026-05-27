@@ -1,8 +1,8 @@
 aead.dev/mem v0.2.0 h1:ufgkESS9+lHV/GUjxgc2ObF43FLZGSemh+W+y27QFMI=
 aead.dev/mem v0.2.0/go.mod h1:4qj+sh8fjDhlvne9gm/ZaMRIX9EkmDrKOLwmyDtoMWM=
-aead.dev/mtls v0.2.1 h1:47NHWciMvrmEhlkpnis8/RGEa9HR9gcbDPfcArG+Yqs=
-aead.dev/mtls v0.2.1/go.mod h1:rZvRApIcPkCNu2AgpFoaMxKBee/XVkKs7wEuYgqLI3Q=
-github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
-github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-google.golang.org/protobuf v1.33.0 h1:uNO2rsAINq/JlFpSdYEKIZ0uKD/R9cpdv0T+yoGwGmI=
-google.golang.org/protobuf v1.33.0/go.mod h1:c6P6GXX6sHbq/GpV6MGZEdwhWPcYBgnhAHhKbcUYpos=
+aead.dev/mtls v0.4.0 h1:s+nuIKH0ZZIZ1RsfOjYVx0q2OcfKFKS3UaJGngrTLFY=
+aead.dev/mtls v0.4.0/go.mod h1:ZuSTM2+kagQsjaWoHn7yTU36MAaEaH/5Aq5XR4uYMk4=
+github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
+google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
+google.golang.org/protobuf v1.36.11/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=

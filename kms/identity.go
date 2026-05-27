@@ -9,9 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
-	"math/big"
 	"strconv"
 	"time"
 
@@ -79,16 +77,9 @@ func (p Privilege) String() string {
 //
 // The template may be nil. In such a case the returned certificate
 // is generated using a default template and valid for 90 days.
-func GenerateCertificate(key mtls.PrivateKey, template *x509.Certificate) (tls.Certificate, error) {
+func GenerateCertificate(key mtls.Signer, template *x509.Certificate) (tls.Certificate, error) {
 	if template == nil {
-		serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-		serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-		if err != nil {
-			return tls.Certificate{}, err
-		}
-
 		template = &x509.Certificate{
-			SerialNumber: serialNumber,
 			Subject: pkix.Name{
 				CommonName: key.Identity().String(),
 			},
@@ -102,23 +93,17 @@ func GenerateCertificate(key mtls.PrivateKey, template *x509.Certificate) (tls.C
 		}
 	}
 
-	certDER, err := x509.CreateCertificate(rand.Reader, template, template, key.Public(), key.Private())
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, key.Public(), key)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
-	privPKCS8, err := x509.MarshalPKCS8PrivateKey(key.Private())
+	leaf, err := x509.ParseCertificate(certDER)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
-	cert, err := tls.X509KeyPair(
-		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}),
-		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privPKCS8}),
-	)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-	if cert.Leaf == nil {
-		cert.Leaf, _ = x509.ParseCertificate(cert.Certificate[0])
-	}
-	return cert, nil
+	return tls.Certificate{
+		Certificate: [][]byte{certDER},
+		PrivateKey:  key,
+		Leaf:        leaf,
+	}, nil
 }

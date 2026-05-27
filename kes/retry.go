@@ -232,6 +232,8 @@ type requestOption func(*http.Request)
 
 // withHeader returns a requestOption that sets the given
 // key-value pair as HTTP header.
+//
+//nolint:unparam
 func withHeader(key, value string) requestOption {
 	return func(req *http.Request) {
 		req.Header.Set(key, value)
