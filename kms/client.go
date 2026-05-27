@@ -43,7 +43,7 @@ type Config struct {
 	//
 	// When providing an API key, no TLS.Certificates
 	// or TLS.GetClientCertificate must be present.
-	APIKey mtls.PrivateKey
+	APIKey *mtls.PrivateKey
 
 	// Optional TLS configuration.
 	//

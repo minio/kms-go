@@ -126,7 +126,7 @@ var _ net.Error = (*ConnError)(nil) // compiler check
 // Error returns the string representation of the ConnError.
 func (c *ConnError) Error() string { return fmt.Sprintf("kes: connection error: %v", c.Err) }
 
-// Unwarp returns the underlying connection error.
+// Unwrap returns the underlying connection error.
 func (c *ConnError) Unwrap() error { return c.Err }
 
 // Timeout reports whether the error is caused
