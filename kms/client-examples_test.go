@@ -171,6 +171,36 @@ func ExampleClient_CreateEnclave() {
 	}
 }
 
+// ExampleClient_ImportKeyRing shows how to import a key with all of its
+// versions in a single request.
+func ExampleClient_ImportKeyRing() {
+	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")
+	if err != nil {
+		log.Fatalf("Failed to parse KMS API key: %v", err)
+	}
+
+	client, err := kms.NewClient(&kms.Config{
+		Endpoints: []string{
+			"127.0.0.1:7373",
+		},
+		APIKey: key,
+	})
+	if err != nil {
+		log.Fatalf("Failed to create KMS client: %v", err)
+	}
+
+	request := &kms.ImportKeyRingRequest{
+		Name: "my-key",
+		Versions: []kms.ImportKeyVersion{
+			{Version: 1, Type: kms.AES256, Key: make([]byte, 32)},
+			{Version: 2, Type: kms.AES256, Key: make([]byte, 32)},
+		},
+	}
+	if err = client.ImportKeyRing(context.TODO(), "minio-tenant-foo", request); err != nil {
+		log.Fatalf("Failed to import key ring '%s': %v", request.Name, err)
+	}
+}
+
 // ExampleClient_DeleteEnclave shows how to delete an existing enclave.
 func ExampleClient_DeleteEnclave() {
 	key, err := mtls.ParsePrivateKey("k1:d7cY_5k8HbBGkZpoy2hGmvkxg83QDBXsA_nFXDfTk2E")

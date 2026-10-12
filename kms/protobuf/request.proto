@@ -126,6 +126,25 @@ message ImportKeyRequest {
   bytes Key = 3 [ json_name = "key" ];
 }
 
+message ImportKeyRingVersion {
+  // Type is the type of the key version. If not set, the KMS server picks
+  // a key type.
+  string Type = 1 [ json_name = "type" ];
+
+  bytes Key = 2 [ json_name = "key" ];
+
+  // Version is the version number of the key version. It must be non-zero
+  // and unique within the key ring; the KMS server verifies this.
+  uint32 Version = 3 [ json_name = "version" ];
+}
+
+message ImportKeyRingRequest {
+  string Name = 1 [ json_name = "name" ];
+
+  // Versions are the key versions of the key ring.
+  repeated ImportKeyRingVersion Versions = 2 [ json_name = "versions" ];
+}
+
 message DeleteKeyRequest {
   string Name = 1 [ json_name = "name" ];
 
