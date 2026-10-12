@@ -1207,6 +1207,34 @@ func (c *Client) ImportKey(ctx context.Context, enclave string, req *ImportKeyRe
 	return resp.Body.Close()
 }
 
+// ImportKeyRing imports an existing key ring, i.e. a key with all of its
+// versions, with the name req.Name into the given enclave in a single
+// request. Imported keys are marked by the KMS server to distinguish them
+// from keys that never left the KMS boundary.
+//
+// It returns ErrEnclaveNotFound if no such enclave exists and ErrKeyExists
+// if such a key already exists wrapped in a HostError.
+//
+// The returned error is of type *HostError.
+func (c *Client) ImportKeyRing(ctx context.Context, enclave string, req *ImportKeyRingRequest) error {
+	p := pool.Get(128 + 64*len(req.Versions))
+	defer pool.Put(p)
+
+	body, err := cmds.Encode((*p)[:0], cmds.KeyImportRing, req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.Send(ctx, &Request{
+		Enclave: enclave,
+		Body:    body,
+	})
+	if err != nil {
+		return err
+	}
+	return resp.Body.Close()
+}
+
 // KeyStatus returns status information about one or multiple keys
 // within the enclave. Without any requests, KeyStatus returns an
 // empty slice and no error.

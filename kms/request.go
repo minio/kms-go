@@ -522,6 +522,75 @@ func (r *ImportKeyRequest) UnmarshalPB(v *pb.ImportKeyRequest) error {
 	return nil
 }
 
+// ImportKeyVersion is a single secret key version of an ImportKeyRingRequest.
+type ImportKeyVersion struct {
+	// Version is the version number of the key version. It is required
+	// and must be non-zero and unique within the key ring. The KMS server
+	// verifies this.
+	Version uint32
+
+	// Type of the key version. For example, AES256.
+	// If not set, the server will pick a key type.
+	Type SecretKeyType
+
+	// Key is the secret key imported into the KMS server.
+	// It must be a valid key for the given key type.
+	Key []byte
+}
+
+// ImportKeyRingRequest contains options for importing a full key ring,
+// i.e. a key with all of its versions, in a single request.
+type ImportKeyRingRequest struct {
+	// Name is the name of the key to create.
+	Name string
+
+	// Versions are the key versions of the key ring. It must contain
+	// at least one key version. The order of the key versions is given
+	// by ImportKeyVersion.Version, not by the order of this slice.
+	Versions []ImportKeyVersion
+}
+
+// MarshalPB converts the ImportKeyRingRequest into its protobuf representation.
+func (r *ImportKeyRingRequest) MarshalPB(v *pb.ImportKeyRingRequest) error {
+	if r.Name == "" {
+		return errors.New("kms: invalid ImportKeyRingRequest: name is empty")
+	}
+	if len(r.Versions) == 0 {
+		return errors.New("kms: invalid ImportKeyRingRequest: no key versions")
+	}
+
+	v.Name = r.Name
+	v.Versions = make([]*pb.ImportKeyRingVersion, 0, len(r.Versions))
+	for _, version := range r.Versions {
+		pv := &pb.ImportKeyRingVersion{Key: version.Key, Version: version.Version}
+		if version.Type != 0 {
+			pv.Type = version.Type.String()
+		}
+		v.Versions = append(v.Versions, pv)
+	}
+	return nil
+}
+
+// UnmarshalPB initializes the ImportKeyRingRequest from its protobuf representation.
+func (r *ImportKeyRingRequest) UnmarshalPB(v *pb.ImportKeyRingRequest) error {
+	versions := make([]ImportKeyVersion, 0, len(v.Versions))
+	for _, pv := range v.Versions {
+		var t SecretKeyType
+		if pv.GetType() != "" {
+			var err error
+			t, err = ParseSecretKeyType(pv.GetType())
+			if err != nil {
+				return err
+			}
+		}
+		versions = append(versions, ImportKeyVersion{Type: t, Key: pv.GetKey(), Version: pv.GetVersion()})
+	}
+
+	r.Name = v.Name
+	r.Versions = versions
+	return nil
+}
+
 // DeleteKeyRequest contains options for deleting secret keys.
 //
 // For removing just a single key version from a key refer to
