@@ -536,6 +536,11 @@ type ImportKeyVersion struct {
 	// Key is the secret key imported into the KMS server.
 	// It must be a valid key for the given key type.
 	Key []byte
+
+	// MACKey is the optional secret key imported into the KMS server for
+	// computing message authentication codes (MACs) with this key version.
+	// If empty, the server generates one.
+	MACKey []byte
 }
 
 // ImportKeyRingRequest contains options for importing a full key ring,
@@ -562,7 +567,7 @@ func (r *ImportKeyRingRequest) MarshalPB(v *pb.ImportKeyRingRequest) error {
 	v.Name = r.Name
 	v.Versions = make([]*pb.ImportKeyRingVersion, 0, len(r.Versions))
 	for _, version := range r.Versions {
-		pv := &pb.ImportKeyRingVersion{Key: version.Key, Version: version.Version}
+		pv := &pb.ImportKeyRingVersion{Key: version.Key, Version: version.Version, MACKey: version.MACKey}
 		if version.Type != 0 {
 			pv.Type = version.Type.String()
 		}
@@ -583,7 +588,7 @@ func (r *ImportKeyRingRequest) UnmarshalPB(v *pb.ImportKeyRingRequest) error {
 				return err
 			}
 		}
-		versions = append(versions, ImportKeyVersion{Type: t, Key: pv.GetKey(), Version: pv.GetVersion()})
+		versions = append(versions, ImportKeyVersion{Type: t, Key: pv.GetKey(), Version: pv.GetVersion(), MACKey: pv.GetMACKey()})
 	}
 
 	r.Name = v.Name
