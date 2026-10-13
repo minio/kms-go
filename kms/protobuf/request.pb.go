@@ -735,7 +735,10 @@ type ImportKeyRingVersion struct {
 	Key  []byte `protobuf:"bytes,2,opt,name=Key,json=key,proto3" json:"Key,omitempty"`
 	// Version is the version number of the key version. It must be non-zero
 	// and unique within the key ring; the KMS server verifies this.
-	Version       uint32 `protobuf:"varint,3,opt,name=Version,json=version,proto3" json:"Version,omitempty"`
+	Version uint32 `protobuf:"varint,3,opt,name=Version,json=version,proto3" json:"Version,omitempty"`
+	// MACKey is the optional secret key used for computing message
+	// authentication codes (MACs) with this key version.
+	MACKey        []byte `protobuf:"bytes,4,opt,name=MACKey,json=mac_key,proto3" json:"MACKey,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -789,6 +792,13 @@ func (x *ImportKeyRingVersion) GetVersion() uint32 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *ImportKeyRingVersion) GetMACKey() []byte {
+	if x != nil {
+		return x.MACKey
+	}
+	return nil
 }
 
 type ImportKeyRingRequest struct {
@@ -1662,11 +1672,12 @@ const file_request_proto_rawDesc = "" +
 	"\x10ImportKeyRequest\x12\x12\n" +
 	"\x04Name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04Type\x18\x02 \x01(\tR\x04type\x12\x10\n" +
-	"\x03Key\x18\x03 \x01(\fR\x03key\"V\n" +
+	"\x03Key\x18\x03 \x01(\fR\x03key\"o\n" +
 	"\x14ImportKeyRingVersion\x12\x12\n" +
 	"\x04Type\x18\x01 \x01(\tR\x04type\x12\x10\n" +
 	"\x03Key\x18\x02 \x01(\fR\x03key\x12\x18\n" +
-	"\aVersion\x18\x03 \x01(\rR\aversion\"g\n" +
+	"\aVersion\x18\x03 \x01(\rR\aversion\x12\x17\n" +
+	"\x06MACKey\x18\x04 \x01(\fR\amac_key\"g\n" +
 	"\x14ImportKeyRingRequest\x12\x12\n" +
 	"\x04Name\x18\x01 \x01(\tR\x04name\x12;\n" +
 	"\bVersions\x18\x02 \x03(\v2\x1f.minio.kms.ImportKeyRingVersionR\bversions\"c\n" +

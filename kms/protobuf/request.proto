@@ -136,6 +136,10 @@ message ImportKeyRingVersion {
   // Version is the version number of the key version. It must be non-zero
   // and unique within the key ring; the KMS server verifies this.
   uint32 Version = 3 [ json_name = "version" ];
+
+  // MACKey is the optional secret key used for computing message
+  // authentication codes (MACs) with this key version.
+  bytes MACKey = 4 [ json_name = "mac_key" ];
 }
 
 message ImportKeyRingRequest {
