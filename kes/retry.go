@@ -326,6 +326,15 @@ retry:
 		if !fullRetry && !shouldProbe && isTimedout {
 			continue
 		}
+		// A previous attempt, at the localhost endpoint or at another
+		// endpoint, may have read the body. Rewind it so that this
+		// endpoint receives the whole body. retry.Do rewinds only
+		// before its own retries at the same endpoint.
+		if body != nil {
+			if _, err = body.Seek(0, io.SeekStart); err != nil {
+				return nil, err
+			}
+		}
 		resp, err = lb.sendRequest(ctx, &endpointRequest)
 		if err != nil || resp == nil {
 			endpoint.setTimeout(shouldProbe)
