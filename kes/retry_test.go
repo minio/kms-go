@@ -386,18 +386,32 @@ func TestLoadBalancerSend_MultiHost(t *testing.T) {
 // which retry.Do retries at the same endpoint before Send moves on.
 // Whichever endpoint receives the first request is the one that fails,
 // so the test does not depend on the order in which Send tries them.
+// Send picks the first endpoint of its loop at random, so the 502 case
+// repeats Send with a new load balancer, which has no timed-out
+// endpoint yet, until every order has been covered. The closed
+// connection case runs once because retry.Do sleeps before each of
+// its retries.
 func TestLoadBalancerSend_RewindsBody(t *testing.T) {
 	body := []byte(`{"ciphertext":"dGVzdA=="}`)
 
-	failures := map[string]func(http.ResponseWriter){
-		"502": func(w http.ResponseWriter) { w.WriteHeader(http.StatusBadGateway) },
-		"closed connection": func(w http.ResponseWriter) {
-			if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
-				conn.Close()
-			}
+	failures := map[string]struct {
+		fail   func(http.ResponseWriter)
+		rounds int
+	}{
+		"502": {
+			fail:   func(w http.ResponseWriter) { w.WriteHeader(http.StatusBadGateway) },
+			rounds: 20,
+		},
+		"closed connection": {
+			fail: func(w http.ResponseWriter) {
+				if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+					conn.Close()
+				}
+			},
+			rounds: 1,
 		},
 	}
-	for name, fail := range failures {
+	for name, failure := range failures {
 		for _, localhost := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/localhost=%t", name, localhost), func(t *testing.T) {
 				var (
@@ -416,7 +430,7 @@ func TestLoadBalancerSend_RewindsBody(t *testing.T) {
 						failingHost = r.Host
 					}
 					if r.Host == failingHost {
-						fail(w)
+						failure.fail(w)
 						return
 					}
 					received = append(received, got)
@@ -431,29 +445,33 @@ func TestLoadBalancerSend_RewindsBody(t *testing.T) {
 				srv2 := httptest.NewServer(handler)
 				defer srv2.Close()
 
-				lb := &loadBalancer{
-					sendRequest: sendRequest,
-					endpoints: []*loadBalancerEndpoint{
-						{addr: srv1.URL, localhost: localhost},
-						{addr: srv2.URL},
-					},
-				}
-				resp, err := lb.Send(context.Background(), new(retry), http.MethodPost, "/v1/key/decrypt/my-key", bytes.NewReader(body))
-				if err != nil {
-					t.Fatalf("Send failed: %v", err)
-				}
-				resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					t.Fatalf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
-				}
+				for i := range failure.rounds {
+					lb := &loadBalancer{
+						sendRequest: sendRequest,
+						endpoints: []*loadBalancerEndpoint{
+							{addr: srv1.URL, localhost: localhost},
+							{addr: srv2.URL},
+						},
+					}
+					resp, err := lb.Send(context.Background(), new(retry), http.MethodPost, "/v1/key/decrypt/my-key", bytes.NewReader(body))
+					if err != nil {
+						t.Fatalf("Round %d: Send failed: %v", i, err)
+					}
+					resp.Body.Close()
+					if resp.StatusCode != http.StatusOK {
+						t.Fatalf("Round %d: Expected status %d, got %d", i, http.StatusOK, resp.StatusCode)
+					}
 
-				mu.Lock()
-				defer mu.Unlock()
-				if len(received) != 1 {
-					t.Fatalf("Expected the second endpoint to receive 1 request, got %d", len(received))
-				}
-				if !bytes.Equal(received[0], body) {
-					t.Fatalf("Expected the second endpoint to receive %q, got %q", body, received[0])
+					mu.Lock()
+					got := received
+					received = nil
+					mu.Unlock()
+					if len(got) != 1 {
+						t.Fatalf("Round %d: Expected the second endpoint to receive 1 request, got %d", i, len(got))
+					}
+					if !bytes.Equal(got[0], body) {
+						t.Fatalf("Round %d: Expected the second endpoint to receive %q, got %q", i, body, got[0])
+					}
 				}
 			})
 		}
