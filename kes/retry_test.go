@@ -8,10 +8,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -373,5 +376,153 @@ func TestLoadBalancerSend_MultiHost(t *testing.T) {
 	// in order to trigger probing.
 	for i := range lb.endpoints {
 		lb.endpoints[i].timeout = time.Now().AddDate(0, 0, -1)
+	}
+}
+
+// TestLoadBalancerSend_RewindsBody ensures that an endpoint tried after
+// another endpoint has read the request body receives the whole body.
+// The first endpoint reads the body and then either answers 502, which
+// retry.Do does not retry, or closes the connection without answering,
+// which retry.Do retries at the same endpoint before Send moves on.
+// Whichever endpoint receives the first request is the one that fails,
+// so the test does not depend on the order in which Send tries them.
+// Send picks the first endpoint of its loop at random, so the 502 case
+// repeats Send with a new load balancer, which has no timed-out
+// endpoint yet, until every order has been covered. The closed
+// connection case runs once because retry.Do sleeps before each of
+// its retries.
+func TestLoadBalancerSend_RewindsBody(t *testing.T) {
+	body := []byte(`{"ciphertext":"dGVzdA=="}`)
+
+	failures := map[string]struct {
+		fail   func(http.ResponseWriter)
+		rounds int
+	}{
+		"502": {
+			fail:   func(w http.ResponseWriter) { w.WriteHeader(http.StatusBadGateway) },
+			rounds: 20,
+		},
+		"closed connection": {
+			fail: func(w http.ResponseWriter) {
+				if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+					conn.Close()
+				}
+			},
+			rounds: 1,
+		},
+	}
+	for name, failure := range failures {
+		for _, localhost := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/localhost=%t", name, localhost), func(t *testing.T) {
+				var (
+					mu          sync.Mutex
+					failingHost string
+					received    [][]byte
+				)
+				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					got, err := io.ReadAll(r.Body)
+					if err != nil {
+						t.Errorf("Failed to read request body: %v", err)
+					}
+					mu.Lock()
+					defer mu.Unlock()
+					if failingHost == "" {
+						failingHost = r.Host
+					}
+					if r.Host == failingHost {
+						failure.fail(w)
+						return
+					}
+					received = append(received, got)
+					if !bytes.Equal(got, body) {
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					w.WriteHeader(http.StatusOK)
+				})
+				srv1 := httptest.NewServer(handler)
+				defer srv1.Close()
+				srv2 := httptest.NewServer(handler)
+				defer srv2.Close()
+
+				for i := range failure.rounds {
+					lb := &loadBalancer{
+						sendRequest: sendRequest,
+						endpoints: []*loadBalancerEndpoint{
+							{addr: srv1.URL, localhost: localhost},
+							{addr: srv2.URL},
+						},
+					}
+					resp, err := lb.Send(context.Background(), new(retry), http.MethodPost, "/v1/key/decrypt/my-key", bytes.NewReader(body))
+					if err != nil {
+						t.Fatalf("Round %d: Send failed: %v", i, err)
+					}
+					resp.Body.Close()
+					if resp.StatusCode != http.StatusOK {
+						t.Fatalf("Round %d: Expected status %d, got %d", i, http.StatusOK, resp.StatusCode)
+					}
+
+					mu.Lock()
+					got := received
+					received = nil
+					mu.Unlock()
+					if len(got) != 1 {
+						t.Fatalf("Round %d: Expected the second endpoint to receive 1 request, got %d", i, len(got))
+					}
+					if !bytes.Equal(got[0], body) {
+						t.Fatalf("Round %d: Expected the second endpoint to receive %q, got %q", i, body, got[0])
+					}
+				}
+			})
+		}
+	}
+}
+
+type failingSeeker struct {
+	*bytes.Reader
+	err error
+}
+
+func (f *failingSeeker) Seek(int64, int) (int64, error) { return 0, f.err }
+
+// TestLoadBalancerSend_SeekError ensures that Send returns the error of a
+// body that cannot be rewound for the next endpoint instead of sending
+// what is left of the body, and that it does not place that endpoint,
+// which never received a request, into the timed-out state.
+func TestLoadBalancerSend_SeekError(t *testing.T) {
+	seekErr := errors.New("seek failed")
+	body := &failingSeeker{Reader: bytes.NewReader([]byte(`{"ciphertext":"dGVzdA=="}`)), err: seekErr}
+
+	var requests atomic.Int32
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer failing.Close()
+	next := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer next.Close()
+
+	lb := &loadBalancer{
+		sendRequest: sendRequest,
+		endpoints: []*loadBalancerEndpoint{
+			{addr: failing.URL, localhost: true},
+			{addr: next.URL},
+		},
+	}
+	resp, err := lb.Send(context.Background(), new(retry), http.MethodPost, "/v1/key/decrypt/my-key", body)
+	if !errors.Is(err, seekErr) {
+		t.Fatalf("Expected error %v, got %v", seekErr, err)
+	}
+	if resp != nil {
+		t.Fatalf("Expected no response, got status %d", resp.StatusCode)
+	}
+	if n := requests.Load(); n != 0 {
+		t.Fatalf("Expected the next endpoint to receive no request, got %d", n)
+	}
+	if !lb.endpoints[1].timeout.IsZero() {
+		t.Fatalf("Endpoint %s was expected to NOT be timed-out", lb.endpoints[1].addr)
 	}
 }
